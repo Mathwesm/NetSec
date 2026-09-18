@@ -1,4 +1,14 @@
 {
+  "Pure typed function": {
+    "prefix": "fn",
+    "body": ["fn ${1:service_port}(int ${2:base}, int ${3:offset}) -> port = port(${2:base} + ${3:offset});"],
+    "description": "Declare a pure function with explicit parameter and return types"
+  },
+  "DNS expectation": {
+    "prefix": "dns",
+    "body": ["check dns \"${1:app.example.test}\" expect ip(\"${2:192.0.2.10}\");"],
+    "description": "Verify an A or AAAA answer from the current DNS server"
+  },
   "Host group": {
     "prefix": "group",
     "body": [

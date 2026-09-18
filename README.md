@@ -111,7 +111,7 @@ esperada de conectividade depois do bloqueio.
 
 ```sh
 npm --prefix editor/vscode run package
-code --install-extension editor/vscode/netsec-language-0.1.0.vsix
+code --install-extension editor/vscode/netsec-language-0.2.0.vsix
 code .
 ```
 

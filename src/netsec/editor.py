@@ -11,6 +11,7 @@ from netsec.core.lexer import KEYWORDS, TYPES, tokenize
 from netsec.core.model import NetSecError, Source, Token
 
 _TARGETS_LOOKBEHIND = 2
+_FUNCTION_HEADER_TOKENS = 2
 
 
 class EditorRequest(BaseModel):
@@ -73,7 +74,29 @@ def _visible_symbols(request: EditorRequest) -> list[dict[str, object]]:
     visible: dict[str, dict[str, object]] = {}
     for scope in scopes:
         visible.update(scope)
+    function_name, parameters = _function_parameters(tokens)
+    if function_name:
+        visible.pop(function_name, None)
+        visible.update(parameters)
     return list(visible.values())
+
+
+def _function_parameters(tokens: tuple[Token, ...]) -> tuple[str, dict[str, dict[str, object]]]:
+    declarations = [index for index, token in enumerate(tokens) if token.kind == "fn"]
+    if not declarations:
+        return "", {}
+    start = declarations[-1]
+    tail = tokens[start:]
+    if any(token.kind == ";" for token in tail) or len(tail) < _FUNCTION_HEADER_TOKENS:
+        return "", {}
+    parameters: dict[str, dict[str, object]] = {}
+    for index, token in enumerate(tail):
+        if token.kind == ")":
+            break
+        if token.kind in TYPES and index + 1 < len(tail) and tail[index + 1].kind == "NAME":
+            parameter = tail[index + 1]
+            parameters[parameter.text] = _symbol(parameter, token.kind)
+    return tail[1].text, parameters
 
 
 def _symbol(token: Token, type_name: str) -> dict[str, object]:
