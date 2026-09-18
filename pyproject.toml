@@ -18,7 +18,7 @@ netsec = "netsec.cli:main"
 packages = [{ include = "netsec", from = "src" }]
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.15"
+ruff = "^0.16"
 mypy = "^1.19"
 pytest = "^8.4"
 pytest-cov = "^6.0"
