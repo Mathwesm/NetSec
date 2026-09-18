@@ -18,6 +18,7 @@ MAX_INSTRUCTIONS = 10_000
 MAX_HOSTS = 128
 MAX_REPEAT = 100
 MAX_EXPRESSION_DEPTH = 100
+MAX_PLAN_TEXT = 1_000_000
 SERVICES = MappingProxyType({"ssh": 22, "http": 80, "https": 443})
 
 
@@ -85,6 +86,10 @@ class Compiler:
             instructions.extend(self._top_level(statement))
             _check_size(instructions, statement.span)
         _check_conflicts(instructions)
+        if sum(len(item.message) for item in instructions) > MAX_PLAN_TEXT:
+            fail(
+                "E_LIMIT", "Expanded plan text exceeds 1000000 characters", instructions[-1].source
+            )
         return Plan(instructions=tuple(instructions))
 
     def _top_level(self, statement: Statement) -> list[Instruction]:

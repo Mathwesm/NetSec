@@ -121,3 +121,9 @@ def test_long_protocol_expression_reports_limit_instead_of_python_recursion() ->
     expression = " == ".join(["tcp"] * 1500)
     with pytest.raises(NetSecError, match="E_LIMIT"):
         compile_source(program(f"check port 22 protocol {expression};"))
+
+
+def test_repetition_cannot_expand_small_source_into_an_excessive_report() -> None:
+    body = 'report "' + "x" * 200 + '";'
+    with pytest.raises(NetSecError, match="plan text exceeds"):
+        compile_source(program("repeat 100 { repeat 100 { " + body + " } }"))

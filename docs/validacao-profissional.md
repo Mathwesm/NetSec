@@ -4,7 +4,7 @@
 
 - Ruff format/check: aprovado.
 - mypy estrito: verificação explícita para Windows e Linux.
-- pytest: 139 testes após integrar a VPN e o escopo de parâmetros no autocomplete.
+- pytest: 140 testes após integrar VPN, autocomplete e limite de texto expandido.
 - Detecção de segredos: zero achados.
 - Extensão VS Code: verificação de tipos e quatro testes aprovados.
 - Laboratório profissional: seis verificações de integração aprovadas, com dois servidores.

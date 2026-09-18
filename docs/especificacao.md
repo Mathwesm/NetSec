@@ -109,6 +109,8 @@ são substituídos por valores artificiais para essa verificação. Chamadas usa
 léxico, tipos exatos e aridade exata. Funções precisam ser declaradas antes do uso;
 recursão e definições aninhadas são recusadas. O limite é 32 chamadas aninhadas e 100.000
 avaliações por compilação. Não há atribuição posterior, imports ou exceções de usuário.
+O texto acumulado das instruções expandidas é limitado a 1.000.000 de caracteres, para
+que repetições de reports não gerem relatórios desproporcionais ao arquivo de entrada.
 
 `check dns "app.test" expect ip("192.0.2.10");` consulta o IP do host atual como servidor
 DNS na porta 53 e compara o conjunto de respostas A/AAAA com o endereço esperado.
