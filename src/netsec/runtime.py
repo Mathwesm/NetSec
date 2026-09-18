@@ -85,6 +85,9 @@ class SimulationAdapter:
     def check(self, instruction: Instruction) -> ProbeResult:
         """Observe scenario services after applying simulated policies."""
         host = self.scenario.hosts[instruction.host]
+        key = (instruction.host, instruction.port, instruction.protocol)
+        if self.rules.get(key) == "deny":
+            return ProbeResult(False, "blocked", "Blocked by simulated firewall")
         if instruction.operation == "check_dns":
             matches = instruction.expected in host.dns_records.get(instruction.message, ())
             return ProbeResult(
@@ -92,9 +95,6 @@ class SimulationAdapter:
                 "resolved" if matches else "unexpected_address",
                 "Explicit simulated DNS record",
             )
-        key = (instruction.host, instruction.port, instruction.protocol)
-        if self.rules.get(key) == "deny":
-            return ProbeResult(False, "blocked", "Blocked by simulated firewall")
         if instruction.port not in host.open_ports:
             return ProbeResult(False, "closed", "Port is closed in scenario")
         if instruction.operation == "check_service" and instruction.message not in host.services:

@@ -9,6 +9,7 @@ import pytest
 from netsec.core.compiler import compile_source
 from netsec.core.model import NetSecError
 from netsec.evaluation import wrap
+from netsec.runtime import Scenario, SimulationAdapter, execute
 from netsec.services.dns import probe_dns
 
 
@@ -90,3 +91,15 @@ def test_dns_failure_is_not_mistaken_for_health(
     result = probe_dns("192.0.2.53", "app.test", "192.0.2.1", 0.1)
     assert not result.success and result.status == status
     assert resolver.resolve.call_count == calls
+
+
+def test_simulated_dns_observes_earlier_udp_firewall_policy() -> None:
+    scenario = Scenario.model_validate_json(
+        '{"hosts":{"192.0.2.10":{"dns_records":{"app.test.":["192.0.2.1"]}}}}'
+    )
+    plan = compile_source(
+        wrap('firewall deny port 53 protocol udp; check dns "app.test" expect "192.0.2.1";')
+    )
+    result = execute(plan, SimulationAdapter(scenario), "simulate")
+    assert result.records[1].status == "blocked"
+    assert not result.success
