@@ -21,7 +21,7 @@ packages = [{ include = "netsec", from = "src" }]
 ruff = "^0.15"
 mypy = "^1.19"
 pytest = "^8.4"
-pytest-cov = "^6.0"
+pytest-cov = "^7.1"
 pre-commit = "^4.0"
 detect-secrets = "^1.5"
 poethepoet = "^0.32"
