@@ -35,7 +35,7 @@ def test_windows_uac_cancellation_remains_visible(monkeypatch: pytest.MonkeyPatc
     shell = Mock(return_value=5)
     library = Mock()
     library.shell32.ShellExecuteW = shell
-    monkeypatch.setattr("netsec.desktop_process.sys.platform", "win32")
+    monkeypatch.setattr("netsec.desktop_process.platform.system", lambda: "Windows")
     monkeypatch.setattr("netsec.desktop_process.ctypes.windll", library, raising=False)
     with pytest.raises(RuntimeFailureError, match="cancelled or denied"):
         request_elevation()

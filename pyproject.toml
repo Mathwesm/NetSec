@@ -34,7 +34,9 @@ pyinstaller = ">=6.16,<7"
 [tool.poe.tasks]
 fmt = "ruff format ."
 lint = "ruff check --fix ."
-types = "mypy src/"
+types = ["types-windows", "types-linux"]
+types-windows = "mypy --platform win32 src/"
+types-linux = "mypy --platform linux src/"
 test = "pytest -q"
 scan = "python -m netsec.quality"
 editor-types = "npm --prefix editor/vscode run check"

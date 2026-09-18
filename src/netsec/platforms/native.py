@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import sys
+import platform
 
 from netsec.core.compiler import Instruction, Plan
 from netsec.platforms.linux import LinuxFirewall
@@ -15,9 +15,9 @@ from netsec.services.probes import ProbeResult
 
 def native_backend() -> FirewallBackend:
     """Choose the operating-system backend without requesting elevation."""
-    if sys.platform == "linux":
+    if platform.system() == "Linux":
         return LinuxFirewall()
-    if sys.platform == "win32":
+    if platform.system() == "Windows":
         return WindowsFirewall()
     raise RuntimeFailureError("Native firewall supports Linux and Windows only")
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 from netsec.runtime import RuntimeFailureError
 
 _SHELL_EXECUTE_ERROR_LIMIT = 32
+_CREATE_NO_WINDOW = 0x08000000
 
 
 def cli_command(arguments: list[str]) -> list[str]:
@@ -25,15 +27,24 @@ def cli_command(arguments: list[str]) -> list[str]:
 
 def is_elevated() -> bool:
     """Read Windows administrator status without opening a consent dialog."""
-    return sys.platform == "win32" and bool(ctypes.windll.shell32.IsUserAnAdmin())
+    library = getattr(ctypes, "windll", None)
+    return (
+        platform.system() == "Windows"
+        and library is not None
+        and bool(library.shell32.IsUserAnAdmin())
+    )
 
 
 def request_elevation() -> None:
     """Ask Windows UAC to open a separate administrator window; never bypass consent."""
-    if sys.platform != "win32":
+    if platform.system() != "Windows":
         raise RuntimeFailureError("Use sudo explicitly on Linux; this button is Windows-only")
     arguments = [] if getattr(sys, "frozen", False) else ["-m", "netsec.desktop"]
-    shell = ctypes.windll.shell32.ShellExecuteW
+    # ctypes exposes this loader only on Windows; keep module importable on Linux.
+    library = getattr(ctypes, "windll", None)
+    if library is None:
+        raise RuntimeFailureError("Windows system library is unavailable")
+    shell = library.shell32.ShellExecuteW
     shell.argtypes = [
         ctypes.c_void_p,
         ctypes.c_wchar_p,
@@ -62,7 +73,7 @@ def run_command(arguments: list[str]) -> tuple[int, str]:
             encoding="utf-8",
             errors="replace",
             env=environment,
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            creationflags=_CREATE_NO_WINDOW if platform.system() == "Windows" else 0,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise RuntimeFailureError(
