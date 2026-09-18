@@ -1,5 +1,12 @@
 # NetSec
 
+Esta é a **linha profissional 0.2**, em `feat/professional-platform`.
+A apresentação de 20 slides, os quatro apresentadores e o roteiro da disciplina ficam
+preservados em `feat/academic-presentation`.
+
+Comece pelo [guia profissional passo a passo](docs/profissional.md): instalação, interface
+Windows/UAC, firewall nativo, SSH, DNS, funções e recuperação após falhas.
+
 Linguagem com tipos explícitos para inventários por IP, verificações de rede e políticas
 de firewall. Possui compilador e executor próprios, diagnósticos com arquivo/linha/coluna
 e extensão para VS Code. Um programa inteiro é validado antes de qualquer ação de rede.
@@ -29,7 +36,7 @@ portão completo, use Node.js **24**. Docker só é necessário para o laborató
 VS Code é necessário apenas para usar a extensão.
 
 ```sh
-git clone https://github.com/Mathwesm/NetSec.git
+git clone --branch feat/professional-platform https://github.com/Mathwesm/NetSec.git
 cd NetSec
 poetry install
 npm --prefix editor/vscode ci --ignore-scripts
@@ -80,8 +87,10 @@ Para um arquivo com checks e reports direcionados aos seus IPs explícitos:
 poetry run netsec run meu_inventario.netsec --mode network --timeout 2
 ```
 
-O modo `network` faz sondas reais a partir da máquina local. Políticas de firewall são
-executadas pelo adaptador `docker`, dentro do laboratório Linux:
+O modo `network` faz sondas reais a partir da máquina local. O modo `local` administra
+nftables/NetSecurity; `ssh` administra servidores Linux autenticados. Ambos exigem
+`--apply` para regras de firewall. `preview` é estritamente offline e `doctor` é somente
+leitura. O adaptador `docker` continua disponível para o laboratório original:
 
 ```sh
 docker compose -f lab/compose.yaml up -d --build
@@ -138,15 +147,17 @@ Markdown resume a matriz de resultados. Cada execução usa um diretório novo, 
 ## Limitações atuais
 
 Condições são estáticas; não dependem do resultado dos checks. Declarações são imutáveis.
-Não há funções de usuário, inferência de tipos, módulos, closures nem exceções na NetSec.
+Há funções puras tipadas com `fn`, declaradas antes do uso. Não há classes, funções com
+efeitos de rede no corpo, recursão, módulos de usuário ou tratamento de exceções na NetSec.
 O compilador informa o primeiro erro, sem recuperação para listar todos de uma vez.
 
 Checks verificam TCP, identificação SSH e HTTP/HTTPS; não constituem um scanner completo
 de vulnerabilidades. HTTPS exige certificado válido para o IP. UDP genérico é recusado;
-regras UDP são permitidas. Windows Firewall e administração remota de equipamentos físicos
-não estão implementados. O firewall real desta versão usa os containers explícitos do
-laboratório. Não há transação distribuída ou checkpoint de instruções: reaplicar converge
-as regras e repete as verificações.
+regras UDP são permitidas. DNS A/AAAA é verificado contra um resolvedor explícito. Firewall
+Windows nativo e Linux nativo/SSH estão implementados; as evidências distinguem teste do
+CRUD de regras Windows de bloqueio real de tráfego Linux. Não há transação distribuída:
+o diário registra instruções concluídas, e reaplicar converge as regras e repete os checks.
+Não há alteração de roteador, DNS do sistema, NAT ou política padrão de firewall.
 
 O uso padrão é manual, para desenvolvimento e demonstração. Não há job autônomo de
 administração de redes nem alerta Telegram configurado. Logs operacionais ficam em

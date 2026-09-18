@@ -17,6 +17,9 @@ KEYWORDS = frozenset(
         "port",
         "protocol",
         "service",
+        "dns",
+        "expect",
+        "fn",
         "firewall",
         "allow",
         "deny",
@@ -43,7 +46,7 @@ TYPES = frozenset({"int", "bool", "string", "ip", "network", "port", "protocol"}
 _PATTERN = re.compile(
     r"(?P<SPACE>[ \t\r]+)|(?P<NEWLINE>\n)|(?P<COMMENT>//[^\n]*)|"
     r'(?P<STRING>"(?:[^"\\\r\n]|\\[^\r\n])*")|(?P<INT>[0-9]+)|'
-    r"(?P<NAME>[A-Za-z_][A-Za-z_0-9]*)|(?P<SYMBOL>==|!=|<=|>=|[{}();=+*/%<>-])"
+    r"(?P<NAME>[A-Za-z_][A-Za-z_0-9]*)|(?P<SYMBOL>->|==|!=|<=|>=|[{}(),;=+*/%<>-])"
 )
 MAX_INTEGER_DIGITS = 100
 

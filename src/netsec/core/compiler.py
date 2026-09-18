@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from netsec.core.domains import dns_name
+from netsec.core.functions import declare_function
 from netsec.core.model import Expression, Program, Source, Span, Statement, fail
 from netsec.core.parser import parse
 from netsec.core.values import Scope, Value, convert, evaluate, require
@@ -23,11 +25,12 @@ class Instruction(BaseModel):
     """A validated instruction consumed by NetSec's own executor."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
-    operation: Literal["check_port", "check_service", "allow", "deny", "report"]
+    operation: Literal["check_port", "check_service", "check_dns", "allow", "deny", "report"]
     host: str = ""
     port: int = Field(default=0, ge=0, le=65535)
     protocol: Literal["tcp", "udp"] = "tcp"
     message: str = ""
+    expected: str = ""
     source: Span
 
 
@@ -35,7 +38,7 @@ class Plan(BaseModel):
     """Versioned compilation output with a bounded instruction count."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
-    format_version: Literal[1] = 1
+    format_version: Literal[2] = 2
     instructions: tuple[Instruction, ...] = Field(max_length=MAX_INSTRUCTIONS)
 
 
@@ -88,6 +91,8 @@ class Compiler:
         match statement.kind:
             case "binding":
                 _binding(statement, self.scope)
+            case "function":
+                declare_function(statement, self.scope)
             case "group":
                 self._group(statement)
             case "play":
@@ -151,8 +156,8 @@ def _binding(statement: Statement, scope: Scope) -> None:
 
 def _report(statement: Statement, scope: Scope, host: str) -> Instruction:
     value = value_of(statement, scope)
-    if value.type_name == "group":
-        fail("E_TYPE", "Cannot report an inventory group as a scalar", statement.span)
+    if value.type_name in {"group", "function"}:
+        fail("E_TYPE", "Cannot report an inventory group or function as a scalar", statement.span)
     message = str(value.data).lower() if value.type_name == "bool" else str(value.data)
     return Instruction(operation="report", host=host, message=message, source=statement.span)
 
@@ -184,6 +189,8 @@ def _statement(statement: Statement, scope: Scope, host: str) -> list[Instructio
             return body * count
         case "port" | "service" | "firewall":
             return [_network(statement, scope, host)]
+        case "dns":
+            return [_dns(statement, scope, host)]
         case _:
             fail("E_CONTEXT", f"{statement.kind} is not allowed in a play", statement.span)
 
@@ -224,6 +231,26 @@ def _network(statement: Statement, scope: Scope, host: str) -> Instruction:
         operation = "allow" if statement.name == "allow" else "deny"
     return Instruction(
         operation=operation, host=host, port=port, protocol=transport, source=statement.span
+    )
+
+
+def _dns(statement: Statement, scope: Scope, host: str) -> Instruction:
+    value = str(require(value_of(statement, scope), "string", statement.span).data)
+    try:
+        name = dns_name(value)
+    except ValueError as error:
+        fail("E_DNS_NAME", str(error), statement.span)
+    if statement.expected is None:
+        fail("E_DNS_EXPECT", "DNS check requires an expected IP address", statement.span)
+    expected = convert("ip", evaluate(statement.expected, scope), statement.expected.span)
+    return Instruction(
+        operation="check_dns",
+        host=host,
+        port=53,
+        protocol="udp",
+        message=name,
+        expected=str(expected.data),
+        source=statement.span,
     )
 
 

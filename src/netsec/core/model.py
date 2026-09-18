@@ -8,9 +8,20 @@ from typing import Literal, NoReturn
 from pydantic import BaseModel, ConfigDict, Field
 
 type Scalar = str | int | bool
-type ExpressionKind = Literal["literal", "name", "unary", "binary", "convert"]
+type ExpressionKind = Literal["literal", "name", "unary", "binary", "convert", "call"]
 type StatementKind = Literal[
-    "binding", "group", "host", "play", "port", "service", "firewall", "report", "if", "repeat"
+    "binding",
+    "group",
+    "host",
+    "play",
+    "port",
+    "service",
+    "dns",
+    "firewall",
+    "report",
+    "if",
+    "repeat",
+    "function",
 ]
 MAX_EXPRESSION_HEIGHT = 100
 
@@ -104,6 +115,15 @@ class Expression:
 
 
 @dataclass(frozen=True, slots=True)
+class Parameter:
+    """Declare a function parameter with an explicit domain type."""
+
+    name: str
+    type_name: str
+    span: Span
+
+
+@dataclass(frozen=True, slots=True)
 class Statement:
     """Represent a declaration, control structure or domain instruction."""
 
@@ -116,6 +136,8 @@ class Statement:
     body: tuple[Statement, ...] = ()
     alternate: tuple[Statement, ...] = ()
     target: str = ""
+    expected: Expression | None = None
+    parameters: tuple[Parameter, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

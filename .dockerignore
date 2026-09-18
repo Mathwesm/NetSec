@@ -9,4 +9,5 @@ __pycache__
 data
 logs
 dist
+build
 .env

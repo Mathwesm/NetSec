@@ -7,7 +7,7 @@ from collections.abc import Callable
 from types import MappingProxyType
 
 from netsec.core.lexer import TYPES, tokenize
-from netsec.core.model import Expression, Program, Source, Statement, Token, fail
+from netsec.core.model import Expression, Parameter, Program, Source, Statement, Token, fail
 
 _PRECEDENCE = MappingProxyType(
     {
@@ -82,6 +82,7 @@ class Parser:
             "report": self.report,
             "if": self.conditional,
             "repeat": self.repeat,
+            "fn": self.function,
         }
         handler = handlers.get(self.current.kind)
         if handler is None:
@@ -114,6 +115,39 @@ class Parser:
         name = self.take("NAME").text
         return Statement("group", token.span, name=name, body=self.block())
 
+    def function(self) -> Statement:
+        """Parse a pure, expression-bodied function with typed parameters and result."""
+        token = self.take("fn")
+        name = self.take("NAME").text
+        self.take("(")
+        parameters: list[Parameter] = []
+        if self.current.kind != ")":
+            while True:
+                type_name = self._type()
+                parameter = self.take("NAME")
+                parameters.append(Parameter(parameter.text, type_name, parameter.span))
+                if not self.accept(","):
+                    break
+        self.take(")")
+        self.take("->")
+        result_type = self._type()
+        self.take("=")
+        expression = self.expression()
+        self.take(";")
+        return Statement(
+            "function",
+            token.span,
+            name=name,
+            type_name=result_type,
+            expression=expression,
+            parameters=tuple(parameters),
+        )
+
+    def _type(self) -> str:
+        if self.current.kind not in TYPES:
+            fail("E_TYPE", "Expected an explicit NetSec type", self.current.span)
+        return self.take(self.current.kind).text
+
     def host(self) -> Statement:
         """Read a host label and an IP expression."""
         token = self.take("host")
@@ -134,6 +168,12 @@ class Parser:
     def check(self) -> Statement:
         """Read a transport or application-layer check."""
         token = self.take("check")
+        if self.accept("dns"):
+            value = self.expression()
+            self.take("expect")
+            expected = self.expression()
+            self.take(";")
+            return Statement("dns", token.span, expression=value, expected=expected)
         if self.accept("service"):
             value = self.expression()
             self.take(";")
@@ -208,8 +248,20 @@ class Parser:
             self.take(")")
             return Expression("convert", token.kind, token.span, (value,))
         if token.kind == "NAME":
-            return Expression("name", token.text, token.span)
+            return self._name_or_call(token)
         return self._literal(token)
+
+    def _name_or_call(self, token: Token) -> Expression:
+        if not self.accept("("):
+            return Expression("name", token.text, token.span)
+        arguments: list[Expression] = []
+        if self.current.kind != ")":
+            while True:
+                arguments.append(self.expression())
+                if not self.accept(","):
+                    break
+        self.take(")")
+        return Expression("call", token.text, token.span, tuple(arguments))
 
     def _literal(self, token: Token) -> Expression:
         if token.kind == "INT":

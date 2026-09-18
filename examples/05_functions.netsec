@@ -1,0 +1,12 @@
+// Functions are pure: they calculate typed values without touching the network.
+fn service_port(int base, int offset) -> port = port(base + offset);
+fn is_internal(ip endpoint, network subnet) -> bool = endpoint in subnet;
+
+group servers {
+    host "application" address "192.0.2.10";
+}
+play "typed policy" targets servers {
+    if is_internal(current_host, network("192.0.2.0/24")) {
+        firewall allow port service_port(8000, 80) protocol tcp;
+    }
+}

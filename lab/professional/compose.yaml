@@ -1,0 +1,41 @@
+name: netsec-professional
+
+x-node: &node
+  build:
+    context: ../..
+    dockerfile: lab/professional/Dockerfile
+  image: netsec-professional-lab:local
+  labels:
+    org.netsec.lab: netsec-professional
+
+services:
+  controller:
+    <<: *node
+    container_name: netsec-professional-controller
+    cap_drop: [ALL]
+    networks:
+      isolated:
+        ipv4_address: 172.30.250.2
+  web01:
+    <<: *node
+    container_name: netsec-professional-web01
+    cap_add: [NET_ADMIN]
+    command: [sh, /app/lab/professional/start.sh]
+    networks:
+      isolated:
+        ipv4_address: 172.30.250.10
+  web02:
+    <<: *node
+    container_name: netsec-professional-web02
+    cap_add: [NET_ADMIN]
+    command: [sh, /app/lab/professional/start.sh]
+    networks:
+      isolated:
+        ipv4_address: 172.30.250.11
+
+networks:
+  isolated:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.250.0/24

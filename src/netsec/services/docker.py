@@ -99,7 +99,9 @@ class DockerAdapter:
             "--timeout",
             str(self.timeout),
         ]
-        if instruction.message:
+        if instruction.operation == "check_dns":
+            command.extend(["--dns-name", instruction.message, "--expect", instruction.expected])
+        elif instruction.message:
             command.extend(["--service", instruction.message])
         output = self._call(command)
         try:

@@ -74,3 +74,62 @@ jobs:
       - name: Stop the laboratory
         if: always()
         run: docker compose -f lab/compose.yaml stop
+
+  professional-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install project
+        run: |
+          pipx install poetry==2.4.1
+          poetry install --no-interaction
+      - name: Start isolated SSH targets
+        run: docker compose -f lab/professional/compose.yaml up -d --build
+      - name: Validate native firewall, pinned SSH and DNS
+        run: poetry run python lab/professional/validate.py
+      - name: Upload professional evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: professional-network-evidence
+          path: data/processed/
+      - name: Stop owned laboratory
+        if: always()
+        run: docker compose -f lab/professional/compose.yaml stop
+
+  windows-native:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install project
+        run: |
+          pipx install poetry==2.4.1
+          poetry install --no-interaction
+      - name: Exercise native rule lifecycle on disposable elevated runner
+        run: poetry run python lab/professional/validate_windows.py --apply
+      - name: Build self-contained Windows installer
+        shell: powershell
+        run: |
+          $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path -LiteralPath $compiler)) { throw 'Inno Setup compiler is unavailable on this runner' }
+          ./packaging/windows/build.ps1 -Compiler $compiler
+      - name: Upload native evidence and installer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: netsec-windows
+          path: |
+            data/processed/
+            dist/**/installer/*.exe

@@ -1,0 +1,8 @@
+group resolvers {
+    host "dns01" address "172.30.250.10";
+    host "dns02" address "172.30.250.11";
+}
+play "validate authoritative answers" targets resolvers {
+    check dns "app.netsec.test" expect ip("172.30.250.10");
+    check dns "app.netsec.test" expect ip("2001:db8::10");
+}

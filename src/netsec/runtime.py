@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from ipaddress import ip_address
 from typing import Literal, Protocol
 
@@ -9,7 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from netsec.core.compiler import Instruction, Plan
 from netsec.core.values import MAX_PORT
-from netsec.services.probes import ProbeResult, probe
+from netsec.services.observations import observe
+from netsec.services.probes import ProbeResult
 
 
 class RuntimeFailureError(Exception):
@@ -38,6 +40,7 @@ class SimulatedHost(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
     open_ports: tuple[int, ...] = ()
     services: tuple[Literal["ssh", "http", "https"], ...] = ()
+    dns_records: dict[str, tuple[str, ...]] = Field(default_factory=dict)
 
     @field_validator("open_ports")
     @classmethod
@@ -82,6 +85,13 @@ class SimulationAdapter:
     def check(self, instruction: Instruction) -> ProbeResult:
         """Observe scenario services after applying simulated policies."""
         host = self.scenario.hosts[instruction.host]
+        if instruction.operation == "check_dns":
+            matches = instruction.expected in host.dns_records.get(instruction.message, ())
+            return ProbeResult(
+                matches,
+                "resolved" if matches else "unexpected_address",
+                "Explicit simulated DNS record",
+            )
         key = (instruction.host, instruction.port, instruction.protocol)
         if self.rules.get(key) == "deny":
             return ProbeResult(False, "blocked", "Blocked by simulated firewall")
@@ -116,7 +126,7 @@ class NetworkAdapter:
 
     def check(self, instruction: Instruction) -> ProbeResult:
         """Probe exactly the IP and port contained in the validated plan."""
-        return probe(instruction.host, instruction.port, instruction.message, self.timeout)
+        return observe(instruction, self.timeout)
 
     def firewall(self, instruction: Instruction) -> ProbeResult:
         """Refuse an unsupported operation regardless of caller behavior."""
@@ -146,13 +156,22 @@ class Execution(BaseModel):
         return all(record.success for record in self.records)
 
 
-def execute(plan: Plan, adapter: Adapter, mode: str) -> Execution:
+def execute(
+    plan: Plan,
+    adapter: Adapter,
+    mode: str,
+    *,
+    fail_fast: bool = False,
+    on_record: Callable[[Record], None] | None = None,
+) -> Execution:
     """Run a fully validated plan, preserving individual adapter failures.
 
     Args:
         plan: Complete compilation output.
         adapter: Explicit execution environment.
         mode: Label included in exported evidence.
+        fail_fast: Stop after the first failed operation while retaining prior results.
+        on_record: Optional durable journal callback after each completed instruction.
 
     Returns:
         Ordered results for every instruction.
@@ -175,6 +194,10 @@ def execute(plan: Plan, adapter: Adapter, mode: str) -> Execution:
                 detail=result.detail,
             )
         )
+        if on_record is not None:
+            on_record(records[-1])
+        if fail_fast and not result.success:
+            break
     return Execution(mode=mode, records=tuple(records))
 
 

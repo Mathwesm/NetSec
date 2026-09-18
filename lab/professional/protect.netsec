@@ -1,0 +1,10 @@
+// Real targets exist only in the isolated professional laboratory.
+group servers {
+    host "web01" address "172.30.250.10";
+    host "web02" address "172.30.250.11";
+}
+play "protect legacy service" targets servers {
+    firewall deny port 23 protocol tcp;
+    check service "ssh";
+    check service "http";
+}

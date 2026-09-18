@@ -1,0 +1,7 @@
+group resolvers {
+    host "internal DNS" address "192.0.2.53";
+}
+play "validate application resolution" targets resolvers {
+    check dns "app.example.test" expect ip("192.0.2.10");
+    check dns "app.example.test" expect ip("2001:db8::10");
+}

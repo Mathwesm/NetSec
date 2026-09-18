@@ -1,6 +1,6 @@
 [project]
 name = "netsec-lang"
-version = "0.1.0"
+version = "0.2.0"
 description = "A typed language for network checks and verifiable firewall policies"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -9,10 +9,14 @@ dependencies = [
   "pydantic>=2.10,<3",
   "pydantic-settings>=2.7,<3",
   "tenacity>=9,<10",
+  "dnspython (>=2.8,<3)",
 ]
 
 [project.scripts]
 netsec = "netsec.cli:main"
+
+[project.gui-scripts]
+netsec-desktop = "netsec.desktop:main"
 
 [tool.poetry]
 packages = [{ include = "netsec", from = "src" }]
@@ -25,6 +29,7 @@ pytest-cov = "^6.0"
 pre-commit = "^4.0"
 detect-secrets = "^1.5"
 poethepoet = "^0.32"
+pyinstaller = ">=6.16,<7"
 
 [tool.poe.tasks]
 fmt = "ruff format ."

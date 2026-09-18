@@ -22,7 +22,7 @@
     },
     {
       "name": "keyword.control.netsec",
-      "match": "\\b(group|host|address|play|targets|check|service|firewall|allow|deny|report|if|else|repeat|and|or|not|in)\\b"
+      "match": "\\b(fn|group|host|address|play|targets|check|service|dns|expect|firewall|allow|deny|report|if|else|repeat|and|or|not|in)\\b"
     },
     {
       "name": "constant.language.netsec",

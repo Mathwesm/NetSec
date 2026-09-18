@@ -7,10 +7,29 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from ipaddress import ip_address, ip_network
 
-from netsec.core.model import Expression, Scalar, Span, fail
+from netsec.core.model import Expression, Parameter, Scalar, Span, fail
 
 MIN_PORT, MAX_PORT = 1, 65535
 MAX_VALUE_BITS = 512
+MAX_EVALUATION_STEPS = 100_000
+MAX_CALL_DEPTH = 32
+
+
+@dataclass(slots=True)
+class EvaluationBudget:
+    """Bound total expression work for one compilation, including nested calls."""
+
+    steps: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class Function:
+    """Capture a typed expression and its lexical declaration environment."""
+
+    parameters: tuple[Parameter, ...]
+    result_type: str
+    expression: Expression
+    closure: Scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +54,9 @@ class Scope:
     def __init__(self, parent: Scope | None = None) -> None:
         self.parent = parent
         self.symbols: dict[str, Symbol] = {}
+        self.functions: dict[str, Function] = {}
+        self.budget: EvaluationBudget = parent.budget if parent else EvaluationBudget()
+        self.call_depth: int = parent.call_depth if parent else 0
 
     def define(self, name: str, value: Value, span: Span) -> None:
         """Declare a name once in this scope, allowing inner shadowing."""
@@ -54,6 +76,16 @@ class Scope:
         if self.parent is not None:
             return self.parent.lookup(name, span)
         fail("E_UNDEFINED", f"Name {name!r} is not declared in this scope", span)
+
+    def function(self, name: str, span: Span) -> Function:
+        """Resolve a callable lexically, respecting local variable shadowing."""
+        if name in self.symbols:
+            if name not in self.functions:
+                fail("E_NOT_CALLABLE", f"Name {name!r} is not a function", span)
+            return self.functions[name]
+        if self.parent is not None:
+            return self.parent.function(name, span)
+        fail("E_UNDEFINED", f"Function {name!r} is not declared", span)
 
 
 def require(value: Value, expected: str, span: Span) -> Value:
@@ -96,6 +128,9 @@ def _domain(type_name: str, value: Value, span: Span) -> Value:
 
 def evaluate(expression: Expression, scope: Scope) -> Value:
     """Evaluate a type-checked expression without eval or exec."""
+    scope.budget.steps += 1
+    if scope.budget.steps > MAX_EVALUATION_STEPS:
+        fail("E_LIMIT", "Compilation exceeds 100000 expression evaluations", expression.span)
     match expression.kind:
         case "literal":
             return Value(expression.type_name, expression.value)
@@ -110,6 +145,23 @@ def evaluate(expression: Expression, scope: Scope) -> Value:
         case "binary":
             left, right = (evaluate(item, scope) for item in expression.operands)
             return _binary(expression, left, right)
+        case "call":
+            return _call(expression, scope)
+
+
+def _call(expression: Expression, scope: Scope) -> Value:
+    function = scope.function(str(expression.value), expression.span)
+    if len(expression.operands) != len(function.parameters):
+        fail("E_ARITY", "Function argument count does not match its declaration", expression.span)
+    if scope.call_depth >= MAX_CALL_DEPTH:
+        fail("E_LIMIT", "Function call depth exceeds 32", expression.span)
+    local = Scope(function.closure)
+    local.budget = scope.budget
+    local.call_depth = scope.call_depth + 1
+    for parameter, argument in zip(function.parameters, expression.operands, strict=True):
+        value = require(evaluate(argument, scope), parameter.type_name, argument.span)
+        local.define(parameter.name, value, parameter.span)
+    return require(evaluate(function.expression, local), function.result_type, expression.span)
 
 
 def _unary(expression: Expression, value: Value) -> Value:

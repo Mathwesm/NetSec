@@ -68,7 +68,7 @@ def _visible_symbols(request: EditorRequest) -> list[dict[str, object]]:
         elif token.kind == "NAME" and index > 0:
             previous = tokens[index - 1]
             following = tokens[index + 1].kind if index + 1 < len(tokens) else "EOF"
-            if (previous.kind in TYPES and following == "=") or previous.kind == "group":
+            if (previous.kind in TYPES and following == "=") or previous.kind in {"group", "fn"}:
                 scopes[-1][token.text] = _symbol(token, previous.kind)
     visible: dict[str, dict[str, object]] = {}
     for scope in scopes:

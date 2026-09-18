@@ -1,4 +1,4 @@
-# Especificação da NetSec 0.1
+# Especificação da NetSec 0.2
 
 ## Propósito e público
 
@@ -70,8 +70,11 @@ Fora desses contextos, a construção do tipo é explícita: `port admin = 22;` 
 Terminais estão entre aspas; chaves indicam repetição e colchetes, opcionalidade.
 
 ```ebnf
-program       = { declaration | group | play | report } ;
+program       = { declaration | function | group | play | report } ;
 declaration   = type, IDENTIFIER, "=", expression, ";" ;
+function      = "fn", IDENTIFIER, "(", [ parameters ], ")", "->", type, "=", expression, ";" ;
+parameters    = type, IDENTIFIER, { ",", type, IDENTIFIER } ;
+arguments     = expression, { ",", expression } ;
 type          = "int" | "bool" | "string" | "ip" | "network" | "port" | "protocol" ;
 group         = "group", IDENTIFIER, "{", host, { host }, "}" ;
 host          = "host", STRING, "address", expression, ";" ;
@@ -79,7 +82,8 @@ play          = "play", STRING, "targets", IDENTIFIER, block ;
 block         = "{", { statement }, "}" ;
 statement     = declaration | check | firewall | report | conditional | repeat ;
 check         = "check", ( "port", expression, "protocol", expression
-                        | "service", expression ), ";" ;
+                        | "service", expression
+                        | "dns", expression, "expect", expression ), ";" ;
 firewall      = "firewall", ( "allow" | "deny" ), "port", expression,
                 "protocol", expression, ";" ;
 report        = "report", expression, ";" ;
@@ -94,13 +98,23 @@ addition      = product, { ( "+" | "-" ), product } ;
 product       = unary, { ( "*" | "/" | "%" ), unary } ;
 unary         = ( "not" | "+" | "-" ), unary | primary ;
 primary       = INTEGER | STRING | "true" | "false" | "tcp" | "udp"
-              | IDENTIFIER | "(", expression, ")"
+              | IDENTIFIER, [ "(", [ arguments ], ")" ] | "(", expression, ")"
               | type, "(", expression, ")" ;
 ```
 
 O parser aceita uma árvore um pouco mais ampla: grupo vazio e construções no bloco errado
-são recusados na análise semântica, com mensagens específicas. Não há atribuição posterior,
-funções de usuário, chamadas arbitrárias, imports nem tratamento de exceções na NetSec.
+são recusados na análise semântica, com mensagens específicas. Funções `fn` são puras e
+retornam uma expressão tipada. Corpos são verificados mesmo sem chamada; parâmetros não
+são substituídos por valores artificiais para essa verificação. Chamadas usam escopo
+léxico, tipos exatos e aridade exata. Funções precisam ser declaradas antes do uso;
+recursão e definições aninhadas são recusadas. O limite é 32 chamadas aninhadas e 100.000
+avaliações por compilação. Não há atribuição posterior, imports ou exceções de usuário.
+
+`check dns "app.test" expect ip("192.0.2.10");` consulta o IP do host atual como servidor
+DNS na porta 53 e compara o conjunto de respostas A/AAAA com o endereço esperado.
+Nomes ASCII/punycode são normalizados sem sufixos implícitos do sistema operacional.
+O plano da linha profissional usa `format_version: 2`; planos da versão 1 não são aceitos
+como versão 2. O agente SSH recebe fonte e recompila, não executa planos externos.
 
 ## Tokens e precedência
 
@@ -111,9 +125,9 @@ funções de usuário, chamadas arbitrárias, imports nem tratamento de exceçõ
 | String | Aspas duplas, escapes JSON, sem quebra de linha literal |
 | Comentário | `//` até o fim da linha; descartado |
 | Espaço | Espaço, tabulação, CR e LF; descartados, preservando posições |
-| Delimitadores | `{` `}` `(` `)` `;` `=` |
+| Delimitadores | `{` `}` `(` `)` `;` `=` `,` `->` |
 | Operadores | `+` `-` `*` `/` `%` `==` `!=` `<` `<=` `>` `>=` `and` `or` `not` `in` |
-| Palavras do domínio | `group host address play targets check port protocol service firewall allow deny report` |
+| Palavras do domínio | `group host address play targets check port protocol service dns expect firewall allow deny report fn` |
 | Controle e tipos | `if else repeat int bool string ip network true false tcp udp` |
 | Fim | Token EOF com a posição imediatamente após o texto |
 
