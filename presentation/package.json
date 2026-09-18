@@ -1,0 +1,24 @@
+{
+  "name": "netsec-academic-presentation",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reproducible academic presentation for NetSec 0.1",
+  "scripts": {
+    "build": "node build.cjs",
+    "check": "node --check build.cjs && node --check render-icons.cjs && node --check verify.cjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "overrides": {
+    "image-size": "2.0.4"
+  },
+  "devDependencies": {
+    "jszip": "3.10.2",
+    "pptxgenjs": "4.0.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-icons": "5.7.0",
+    "sharp": "0.35.4"
+  }
+}

@@ -126,6 +126,9 @@ Markdown resume a matriz de resultados. Cada execução usa um diretório novo, 
 
 ## Organização e material da disciplina
 
+- [Apresentação acadêmica e geração dos slides](presentation/README.md).
+- [Roteiro de demonstração e perguntas de arguição](docs/demonstracao.md).
+- [Separação da versão acadêmica e evolução profissional](docs/evolucao.md).
 - [Especificação, EBNF, tokens e decisões](docs/especificacao.md).
 - [Arquitetura e guia de estudo para a arguição](docs/arquitetura.md).
 - [Datas e critérios das entregas](docs/entregas.md).

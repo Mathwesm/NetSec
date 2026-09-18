@@ -8,6 +8,34 @@ permissions:
   contents: read
 
 jobs:
+  presentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: presentation/package-lock.json
+      - name: Install presentation development dependencies
+        run: npm --prefix presentation ci --ignore-scripts
+      - name: Validate presentation sources and dependencies
+        run: |
+          npm --prefix presentation run check
+          npm --prefix presentation audit --audit-level=high
+      - name: Build and verify the editable deck
+        run: |
+          node presentation/build.cjs data/presentation-build/ci
+          node presentation/verify.cjs data/presentation-build/ci/NetSec_Apresentacao_Academica.pptx
+      - name: Upload the presentation and speaker notes
+        uses: actions/upload-artifact@v4
+        with:
+          name: netsec-academic-presentation
+          path: |
+            data/presentation-build/ci/*.pptx
+            data/presentation-build/ci/*.md
+
   quality:
     strategy:
       fail-fast: false

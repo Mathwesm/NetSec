@@ -1,0 +1,11 @@
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       libreoffice-impress fonts-crosextra-carlito fonts-liberation \
+       poppler-utils python3-lxml python3-defusedxml python3-pil \
+    && apt-get clean
+
+WORKDIR /work
+ENV HOME=/tmp
+ENTRYPOINT ["libreoffice", "-env:UserInstallation=file:///tmp/netsec-office", "--headless"]
