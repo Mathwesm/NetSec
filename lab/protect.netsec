@@ -1,0 +1,11 @@
+group servers {
+    host "web01" address "172.30.249.10";
+    host "web02" address "172.30.249.11";
+}
+play "protect" targets servers {
+    firewall deny port 23 protocol tcp;
+    firewall allow port 22 protocol tcp;
+    check service "ssh";
+    check service "http";
+    report "Policy applied; SSH and HTTP remain reachable.";
+}

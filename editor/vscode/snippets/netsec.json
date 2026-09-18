@@ -1,0 +1,34 @@
+{
+  "Host group": {
+    "prefix": "group",
+    "body": [
+      "group ${1:servers} {",
+      "    host \"${2:server01}\" address \"${3:192.0.2.10}\";",
+      "}"
+    ],
+    "description": "Declare an explicit inventory group"
+  },
+  "Security play": {
+    "prefix": "play",
+    "body": [
+      "play \"${1:security_check}\" targets ${2:servers} {",
+      "    ${0:check port 22 protocol tcp;}",
+      "}"
+    ],
+    "description": "Run a policy for each host in a group"
+  },
+  "Typed IP": {
+    "prefix": "ip",
+    "body": [
+      "ip ${1:server} = ip(\"${2:192.0.2.10}\");"
+    ],
+    "description": "Declare an explicitly typed IP"
+  },
+  "Firewall rule": {
+    "prefix": "firewall",
+    "body": [
+      "firewall ${1|allow,deny|} port ${2:22} protocol ${3|tcp,udp|};"
+    ],
+    "description": "Declare a firewall policy"
+  }
+}

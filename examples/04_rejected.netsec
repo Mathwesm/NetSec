@@ -1,0 +1,13 @@
+// Valid syntax, invalid domain policy: both groups resolve to the same IP.
+group first {
+    host "server" address "192.0.2.10";
+}
+group alias {
+    host "same_server" address "192.0.2.10";
+}
+play "permit" targets first {
+    firewall allow port 22 protocol tcp;
+}
+play "block" targets alias {
+    firewall deny port 22 protocol tcp;
+}

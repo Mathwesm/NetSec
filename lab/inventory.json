@@ -1,0 +1,7 @@
+{
+  "probe_container": "netsec-language-probe",
+  "targets": {
+    "172.30.249.10": "netsec-language-web01",
+    "172.30.249.11": "netsec-language-web02"
+  }
+}

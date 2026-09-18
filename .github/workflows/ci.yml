@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: editor/vscode/package-lock.json
+      - name: Install Poetry
+        run: pipx install poetry==2.4.1
+      - name: Install Python dependencies
+        run: poetry install --no-interaction
+      - name: Install editor development dependencies
+        run: npm --prefix editor/vscode ci --ignore-scripts
+      - name: Run the same local quality gate
+        run: poetry run poe gate
+      - name: Reject formatting drift
+        run: git diff --exit-code
+      - name: Package the editor extension
+        if: runner.os == 'Linux'
+        run: npm --prefix editor/vscode run package
+      - name: Upload the installable extension
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: netsec-vscode
+          path: editor/vscode/*.vsix
+
+  network-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Poetry and dependencies
+        run: |
+          pipx install poetry==2.4.1
+          poetry install --no-interaction
+      - name: Start the isolated laboratory
+        run: docker compose -f lab/compose.yaml up -d --build
+      - name: Validate real network behavior
+        run: poetry run netsec lab-test
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-evidence
+          path: data/processed/
+      - name: Stop the laboratory
+        if: always()
+        run: docker compose -f lab/compose.yaml stop

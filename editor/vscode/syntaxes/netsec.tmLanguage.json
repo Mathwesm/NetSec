@@ -1,0 +1,36 @@
+{
+  "scopeName": "source.netsec",
+  "patterns": [
+    {
+      "name": "comment.line.double-slash.netsec",
+      "match": "//.*$"
+    },
+    {
+      "name": "string.quoted.double.netsec",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.netsec",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "storage.type.netsec",
+      "match": "\\b(int|bool|string|ip|network|port|protocol)\\b"
+    },
+    {
+      "name": "keyword.control.netsec",
+      "match": "\\b(group|host|address|play|targets|check|service|firewall|allow|deny|report|if|else|repeat|and|or|not|in)\\b"
+    },
+    {
+      "name": "constant.language.netsec",
+      "match": "\\b(true|false|tcp|udp)\\b"
+    },
+    {
+      "name": "constant.numeric.netsec",
+      "match": "\\b[0-9]+\\b"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "hosts": {
+    "192.0.2.10": {"open_ports": [22, 23, 80], "services": ["ssh", "http"]},
+    "192.0.2.11": {"open_ports": [22, 80], "services": ["ssh", "http"]}
+  }
+}

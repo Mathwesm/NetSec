@@ -1,0 +1,41 @@
+name: netsec-language
+
+x-lab: &lab
+  build:
+    context: ..
+    dockerfile: lab/Dockerfile
+  image: netsec-language-lab:local
+  labels:
+    org.netsec.lab: netsec-language
+
+services:
+  probe:
+    <<: *lab
+    container_name: netsec-language-probe
+    cap_drop: [ALL]
+    networks:
+      isolated:
+        ipv4_address: 172.30.249.2
+  web01:
+    <<: *lab
+    container_name: netsec-language-web01
+    cap_add: [NET_ADMIN]
+    command: [sh, /app/lab/start.sh]
+    networks:
+      isolated:
+        ipv4_address: 172.30.249.10
+  web02:
+    <<: *lab
+    container_name: netsec-language-web02
+    cap_add: [NET_ADMIN]
+    command: [sh, /app/lab/start.sh]
+    networks:
+      isolated:
+        ipv4_address: 172.30.249.11
+
+networks:
+  isolated:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.249.0/24

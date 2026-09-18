@@ -1,0 +1,9 @@
+group servers {
+    host "web01" address "172.30.249.10";
+    host "web02" address "172.30.249.11";
+}
+play "baseline" targets servers {
+    check port 23 protocol tcp;
+    check service "ssh";
+    check service "http";
+}

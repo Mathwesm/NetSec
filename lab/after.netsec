@@ -1,0 +1,8 @@
+group servers {
+    host "web01" address "172.30.249.10";
+    host "web02" address "172.30.249.11";
+}
+play "verify_block" targets servers {
+    // Exit code 1 is expected: the TCP connection must now fail.
+    check port 23 protocol tcp;
+}

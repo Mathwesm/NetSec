@@ -1,0 +1,18 @@
+// Example 3: domain membership, arithmetic precedence and lexical scopes.
+network trusted = network("192.0.2.0/24");
+int passes = 1 + 2 * 1;
+group servers {
+    host "server01" address "192.0.2.10";
+    host "server02" address "192.0.2.11";
+}
+play "audit_trusted" targets servers {
+    if current_host in trusted and passes > 0 {
+        int passes = 2;
+        repeat passes {
+            check service "http";
+        }
+    } else {
+        report "Outside the configured network.";
+    }
+    report passes;
+}

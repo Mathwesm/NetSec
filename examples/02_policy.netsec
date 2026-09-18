@@ -1,0 +1,12 @@
+// Example 2: typed domain values and repeatable firewall policy.
+port admin_port = port(22);
+protocol transport = tcp;
+group servers {
+    host "server01" address "192.0.2.10";
+}
+play "protect" targets servers {
+    firewall deny port 23 protocol transport;
+    firewall allow port admin_port protocol transport;
+    check port admin_port protocol transport;
+    report "Firewall policy converged.";
+}

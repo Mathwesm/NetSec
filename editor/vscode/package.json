@@ -1,0 +1,37 @@
+{
+  "name": "netsec-language",
+  "displayName": "NetSec",
+  "description": "Syntax highlighting, typed completion and compiler diagnostics for NetSec.",
+  "version": "0.1.0",
+  "publisher": "Mathwesm",
+  "engines": {"vscode": "^1.90.0"},
+  "categories": ["Programming Languages"],
+  "main": "./extension.js",
+  "repository": {"type": "git", "url": "https://github.com/Mathwesm/NetSec.git"},
+  "capabilities": {"untrustedWorkspaces": {"supported": false}},
+  "activationEvents": ["onLanguage:netsec"],
+  "contributes": {
+    "languages": [{"id": "netsec", "aliases": ["NetSec"], "extensions": [".netsec"], "configuration": "./language-configuration.json"}],
+    "grammars": [{"language": "netsec", "scopeName": "source.netsec", "path": "./syntaxes/netsec.tmLanguage.json"}],
+    "snippets": [{"language": "netsec", "path": "./snippets/netsec.json"}],
+    "commands": [{"command": "netsec.validate", "title": "NetSec: Validar programa"}],
+    "configuration": {
+      "title": "NetSec",
+      "properties": {
+        "netsec.command": {"type": "string", "default": "poetry", "description": "Executável que inicia o compilador."},
+        "netsec.arguments": {"type": "array", "items": {"type": "string"}, "default": ["run", "netsec"], "description": "Argumentos anteriores ao subcomando editor."}
+      }
+    }
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test test/*.test.js",
+    "package": "vsce package --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/vscode": "1.90.0",
+    "@vscode/vsce": "^3.6.0",
+    "typescript": "^5.9.0"
+  }
+}

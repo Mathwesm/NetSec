@@ -1,0 +1,10 @@
+// Example 1: original slide syntax, expanded to two hosts.
+group servers {
+    host "server01" address "192.0.2.10";
+    host "server02" address "192.0.2.11";
+}
+play "security_check" targets servers {
+    check port 22 protocol tcp;
+    check service "ssh";
+    report "SSH responds with its application protocol.";
+}

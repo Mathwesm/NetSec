@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: netsec-quality
+        name: NetSec full quality gate
+        entry: poetry run poe gate
+        language: system
+        pass_filenames: false
+        always_run: true
