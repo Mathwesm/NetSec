@@ -7,6 +7,10 @@ preservados em `feat/academic-presentation`.
 Comece pelo [guia profissional passo a passo](docs/profissional.md): instalação, interface
 Windows/UAC, firewall nativo, SSH, DNS, funções e recuperação após falhas.
 
+Também inclui [VPN WireGuard Linux](docs/vpn.md), com manifesto tipado, prévia offline,
+chave privada por variável de ambiente e verificação de handshake. O módulo é um comando
+de recursos (`netsec vpn`), separado da gramática `.netsec`.
+
 Linguagem com tipos explícitos para inventários por IP, verificações de rede e políticas
 de firewall. Possui compilador e executor próprios, diagnósticos com arquivo/linha/coluna
 e extensão para VS Code. Um programa inteiro é validado antes de qualquer ação de rede.

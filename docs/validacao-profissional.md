@@ -3,8 +3,8 @@
 ## Evidência local já executada
 
 - Ruff format/check: aprovado.
-- mypy estrito: aprovado, 35 módulos.
-- pytest: 121 testes aprovados; cobertura observada 79%, sem usar cobertura como meta.
+- mypy estrito: verificação explícita para Windows e Linux.
+- pytest: 138 testes aprovados após integrar a VPN; sem usar cobertura como meta.
 - Detecção de segredos: zero achados.
 - Extensão VS Code: verificação de tipos e quatro testes aprovados.
 - Laboratório profissional: seis verificações de integração aprovadas, com dois servidores.
@@ -27,13 +27,27 @@ removeu a verificação de propriedade para fazer o teste passar.
 O diagnóstico nativo local encontrou NetSecurity e perfis habilitados, mas processo sem
 privilégio de administrador. Nenhuma regra do firewall do computador de desenvolvimento
 foi alterada. O CI possui um teste separado para o ciclo de vida de regra Windows em
-runner elevado e descartável. O resultado desse job deve ser consultado no run associado
-ao commit; esta evidência local não antecipa o resultado remoto.
+runner elevado e descartável. No commit `d20a717`, os cinco jobs passaram:
+[CI 35379157821](https://github.com/Mathwesm/NetSec/actions/runs/35379157821).
+Isso inclui qualidade em Windows/Linux, dois laboratórios e Windows nativo/instalador.
 
 O teste Windows restringe a regra a loopback/porta alta e verifica criação, atualização,
 idempotência e remoção. Não mede bloqueio de tráfego externo. O instalador é construído
 em job próprio; a instalação local do compilador Inno Setup foi bloqueada pelo ambiente.
 Não há assinatura comercial do instalador nem teste manual de consentimento UAC realizado.
+
+## WireGuard Linux
+
+O teste real `validate_vpn.py` criou dois peers, verificou estado `unchanged` na
+reaplicação, realizou HTTP no endereço da VPN e confirmou handshake nos dois lados.
+As interfaces foram removidas ao fim. Evidência pública local:
+`data/processed/vpn-20260918T181935059086Z-05389aee/evidence.json`.
+As chaves privadas permaneceram dentro dos containers e não fazem parte do relatório.
+
+Dois testes de regressão foram escritos e observados falhando antes das correções:
+DNS simulado ignorando bloqueio UDP anterior e endpoint IPv6 com zona permitindo conteúdo
+extra de configuração. Ambos agora são cobertos. A VPN nativa Windows, IPv6 fim a fim,
+roteamento entre LANs, NAT e persistência após reboot não foram testados/implementados.
 
 Nenhum teste foi feito contra servidores de produção, roteadores físicos, GPO corporativa
 ou uma frota distribuída com falhas de energia/rede. Reaplicar reconcilia estado; não há

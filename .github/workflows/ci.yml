@@ -93,6 +93,8 @@ jobs:
         run: docker compose -f lab/professional/compose.yaml up -d --build
       - name: Validate native firewall, pinned SSH and DNS
         run: poetry run python lab/professional/validate.py
+      - name: Validate encrypted WireGuard traffic and owned teardown
+        run: poetry run python lab/professional/validate_vpn.py
       - name: Upload professional evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -125,6 +127,22 @@ jobs:
           $compiler = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
           if (-not (Test-Path -LiteralPath $compiler)) { throw 'Inno Setup compiler is unavailable on this runner' }
           ./packaging/windows/build.ps1 -Compiler $compiler
+      - name: Smoke test per-user installation in a path with spaces
+        shell: powershell
+        run: |
+          $installer = Get-ChildItem -LiteralPath dist -Recurse -Filter 'NetSec-0.2.0-Windows-Setup.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Installer output is missing' }
+          $destination = Join-Path $env:RUNNER_TEMP 'NetSec installation smoke'
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', ('/DIR="' + $destination + '"')) -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw 'Per-user installer failed' }
+          & (Join-Path $destination 'cli/NetSec.exe') check examples/05_functions.netsec
+          if ($LASTEXITCODE -ne 0) { throw 'Installed compiler smoke test failed' }
+          & (Join-Path $destination 'cli/NetSec.exe') doctor
+          if ($LASTEXITCODE -ne 0) { throw 'Installed native bridge smoke test failed' }
+          $desktop = Start-Process -FilePath (Join-Path $destination 'NetSec-Desktop.exe') -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 3
+          if ($desktop.HasExited) { throw 'Installed desktop exited unexpectedly' }
+          Stop-Process -Id $desktop.Id
       - name: Upload native evidence and installer
         if: always()
         uses: actions/upload-artifact@v4

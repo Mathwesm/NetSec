@@ -158,6 +158,9 @@ local de desenvolvimento não está elevada, e seu firewall não foi alterado.
 
 ## 7. Falhas, diários e limites
 
+O módulo [WireGuard Linux](vpn.md) acrescenta criação, reconciliação, status e remoção de
+VPNs por manifesto tipado. As chaves não pertencem ao código `.netsec` nem ao manifesto.
+
 Execuções `local`/`ssh` retêm plano e registros JSONL por instrução em uma pasta exclusiva.
 `--journal-root` seleciona outro diretório. `--fail-fast` para no primeiro resultado ruim;
 sem a opção, resultados individuais são registrados e a execução prossegue. `--output`

@@ -13,6 +13,7 @@ from uuid import uuid4
 from loguru import logger
 from pydantic import ValidationError
 
+from netsec import vpn_cli
 from netsec.agent import AgentRequest, handle
 from netsec.config import Settings
 from netsec.core.compiler import Plan, compile_source
@@ -47,6 +48,7 @@ def argument_parser() -> argparse.ArgumentParser:
     """Define discoverable commands without hidden network side effects."""
     parser = argparse.ArgumentParser(prog="netsec", description="Typed network security language")
     commands = parser.add_subparsers(dest="command", required=True)
+    vpn_cli.register(commands)
     for name in ("tokens", "ast", "check", "compile", "preview", "run", "firewall-remove"):
         command = commands.add_parser(name)
         command.add_argument("file", type=Path)
@@ -215,6 +217,11 @@ def _run_plan(arguments: argparse.Namespace, plan: Plan, adapter: Adapter) -> in
 
 
 def _dispatch(arguments: argparse.Namespace) -> int:
+    if arguments.command == "vpn":
+        if arguments.output is not None and arguments.output.exists():
+            raise RuntimeFailureError("Output file already exists")
+        _emit(vpn_cli.run(arguments), arguments.output)
+        return 0
     if arguments.command in {"doctor", "agent", "editor"}:
         return _utility_command(arguments.command)
     if arguments.command == "lab-test":
