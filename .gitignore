@@ -16,3 +16,5 @@ build/
 node_modules/
 *.vsix
 .DS_Store
+.~lock.*#
+~$*.pptx

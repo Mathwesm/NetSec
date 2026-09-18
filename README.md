@@ -24,6 +24,9 @@ com precedência, `if/else`, `repeat` e escopos lexicais.
 
 ## Instalação
 
+Guia detalhado para quem começa do zero: [primeiros passos](docs/primeiros-passos.md).
+Para apresentar em equipe: [quatro apresentadores e um operador](docs/equipe-apresentacao.md).
+
 Necessário: Python **3.12** e Poetry **2.4.1**. Para desenvolver a extensão e executar o
 portão completo, use Node.js **24**. Docker só é necessário para o laboratório real.
 VS Code é necessário apenas para usar a extensão.
