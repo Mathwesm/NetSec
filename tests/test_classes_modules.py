@@ -84,3 +84,27 @@ def test_import_cannot_read_outside_project(tmp_path: Path) -> None:
     entry.write_text('import "../private.netsec";', encoding="utf-8")
     with pytest.raises(NetSecError, match="E_IMPORT_PATH"):
         load_source(entry)
+
+
+def test_shared_object_graph_equality_does_not_expand_exponentially() -> None:
+    source = "class Leaf { int value; } Leaf a0 = Leaf(1); Leaf b0 = Leaf(1);\n"
+    previous = "Leaf"
+    for index in range(1, 60):
+        name = f"Branch{index}"
+        source += f"class {name} {{ {previous} left; {previous} right; }}\n"
+        source += f"{name} a{index} = {name}(a{index - 1}, a{index - 1});\n"
+        source += f"{name} b{index} = {name}(b{index - 1}, b{index - 1});\n"
+        previous = name
+    plan = compile_source(source + "report a59 == b59;")
+    assert plan.instructions[0].message == "true"
+
+
+def test_class_composition_is_bounded_before_instances_are_constructed() -> None:
+    source = "class Leaf { int value; }\n"
+    previous = "Leaf"
+    for index in range(101):
+        name = f"Branch{index}"
+        source += f"class {name} {{ {previous} item; }}\n"
+        previous = name
+    with pytest.raises(NetSecError, match="Class composition exceeds"):
+        compile_source(source)

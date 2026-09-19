@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   systemd-services:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       PYTHONUTF8: "1"
@@ -22,12 +22,13 @@ jobs:
         run: |
           pipx install poetry==2.4.1
           sudo apt-get update
-          sudo apt-get install -y nginx dnsmasq-base nftables iproute2
+          sudo apt-get install -y nginx dnsmasq-base nftables iproute2 python3.12-venv
       - name: Install root-owned application for privileged jobs
         run: |
           sudo mkdir /opt/netsec-validation
           sudo cp -a "$GITHUB_WORKSPACE/." /opt/netsec-validation/
           sudo chown -R root:root /opt/netsec-validation
+          sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /opt/netsec-validation env use /usr/bin/python3.12
           sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /opt/netsec-validation install --no-interaction
       - name: Validate actual services, recurring jobs and retained evidence
         working-directory: /opt/netsec-validation

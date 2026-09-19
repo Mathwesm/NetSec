@@ -20,7 +20,7 @@ from netsec.platforms.native import NativeAdapter
 from netsec.platforms.process import command
 from netsec.platforms.scheduler import manage
 from netsec.platforms.servers import resource_id
-from netsec.runtime import execute
+from netsec.runtime import RuntimeFailureError, execute
 
 
 def main() -> int:
@@ -69,24 +69,7 @@ play "deploy" targets local {{
         results["stopped_service_recovered"] = (
             repaired.success and repaired.records[0].status == "applied"
         )
-        results["job_install"] = manage(job, "install", apply=True)
-        results["job_repeat"] = manage(job, "install", apply=True)
-        job_unit = f"netsec-job-{job.name}.service"
-        command("systemctl", ["start", job_unit])
-        deadline = time.monotonic() + 20
-        while (
-            systemd.unit_state(job_unit, "ActiveState") == "activating"
-            and time.monotonic() < deadline
-        ):
-            time.sleep(0.2)
-        results["job_result"] = systemd.unit_state(job_unit, "Result")
-        results["timer_enabled"] = systemd.unit_state(
-            f"netsec-job-{job.name}.timer", "UnitFileState"
-        )
-        runs = list((Path("/var/lib/netsec/jobs") / job.name).glob("*/result.json"))
-        results["durable_evidence"] = bool(runs) and all(
-            json.loads(path.read_text(encoding="utf-8"))["success"] for path in runs
-        )
+        _validate_job(job, results)
         results["service_enabled"] = systemd.unit_state(unit, "UnitFileState")
         success = (
             results["http_content"]
@@ -99,13 +82,39 @@ play "deploy" targets local {{
         )
         results["success"] = bool(success)
     finally:
-        results["job_removal"] = manage(job, "remove", apply=True)
-        results["server_removal"] = [item.status for item in adapter.remove_servers(plan)]
+        try:
+            results["job_removal"] = manage(job, "remove", apply=True)
+        except RuntimeFailureError as error:
+            results["job_cleanup_error"] = str(error)
+            results["success"] = False
+        try:
+            results["server_removal"] = [item.status for item in adapter.remove_servers(plan)]
+        except RuntimeFailureError as error:
+            results["server_cleanup_error"] = str(error)
+            results["success"] = False
         (destination / "evidence.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     logger.info(
         "Systemd integration finished | success={} evidence={}", results.get("success"), destination
     )
     return 0 if results.get("success") else 1
+
+
+def _validate_job(job: AutomationJob, results: dict[str, object]) -> None:
+    results["job_install"] = manage(job, "install", apply=True)
+    results["job_repeat"] = manage(job, "install", apply=True)
+    job_unit = f"netsec-job-{job.name}.service"
+    command("systemctl", ["start", job_unit])
+    deadline = time.monotonic() + 20
+    while (
+        systemd.unit_state(job_unit, "ActiveState") == "activating" and time.monotonic() < deadline
+    ):
+        time.sleep(0.2)
+    results["job_result"] = systemd.unit_state(job_unit, "Result")
+    results["timer_enabled"] = systemd.unit_state(f"netsec-job-{job.name}.timer", "UnitFileState")
+    runs = list((Path("/var/lib/netsec/jobs") / job.name).glob("*/result.json"))
+    results["durable_evidence"] = bool(runs) and all(
+        json.loads(path.read_text(encoding="utf-8"))["success"] for path in runs
+    )
 
 
 if __name__ == "__main__":

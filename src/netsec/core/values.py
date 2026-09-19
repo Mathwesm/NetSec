@@ -46,6 +46,7 @@ class ClassType:
     """Describe nominal immutable fields and pure methods."""
 
     fields: tuple[Parameter, ...]
+    depth: int = 1
     methods: dict[str, Function] = field(default_factory=dict)
 
 
@@ -162,7 +163,7 @@ def evaluate(expression: Expression, scope: Scope) -> Value:
             return _unary(expression, evaluate(expression.operands[0], scope))
         case "binary":
             left, right = (evaluate(item, scope) for item in expression.operands)
-            return _binary(expression, left, right)
+            return _binary(expression, left, right, scope.budget)
         case _:
             return _object_expression(expression, scope)
 
@@ -197,6 +198,33 @@ def _construct(expression: Expression, scope: Scope) -> Value:
     return Value(name, "", fields)
 
 
+def _equal(left: Value, right: Value, budget: EvaluationBudget, span: Span) -> bool:
+    pending = [(left, right)]
+    seen: set[tuple[int, int]] = set()
+    while pending:
+        first, second = pending.pop()
+        key = (id(first), id(second))
+        if first is second or key in seen:
+            continue
+        seen.add(key)
+        budget.steps += 1
+        if budget.steps > MAX_EVALUATION_STEPS:
+            fail("E_LIMIT", "Compilation exceeds 100000 expression evaluations", span)
+        if (
+            first.type_name != second.type_name
+            or first.data != second.data
+            or len(first.fields) != len(second.fields)
+        ):
+            return False
+        for (first_name, first_value), (second_name, second_value) in zip(
+            first.fields, second.fields, strict=True
+        ):
+            if first_name != second_name:
+                return False
+            pending.append((first_value, second_value))
+    return True
+
+
 def _call(expression: Expression, scope: Scope) -> Value:
     function = scope.function(str(expression.value), expression.span)
     return _invoke(function, expression, scope)
@@ -229,7 +257,7 @@ def _unary(expression: Expression, value: Value) -> Value:
     return Value("int", -int(value.data) if expression.value == "-" else int(value.data))
 
 
-def _binary(expression: Expression, left: Value, right: Value) -> Value:
+def _binary(expression: Expression, left: Value, right: Value, budget: EvaluationBudget) -> Value:
     name, span = str(expression.value), expression.span
     if name == "in":
         require(left, "ip", span)
@@ -237,8 +265,8 @@ def _binary(expression: Expression, left: Value, right: Value) -> Value:
         return Value("bool", ip_address(str(left.data)) in ip_network(str(right.data)))
     require(right, left.type_name, span)
     if name in {"==", "!="}:
-        result = left == right
-        return Value("bool", result if name == "==" else not result)
+        equal = _equal(left, right, budget, span)
+        return Value("bool", equal if name == "==" else not equal)
     if name in {"and", "or"}:
         require(left, "bool", span)
         result = (

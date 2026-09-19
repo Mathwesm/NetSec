@@ -45,20 +45,30 @@ function Assert-Protected([string]$Path) {
     }
 }
 $executable = [IO.Path]::GetFullPath([string]$request.executable)
+$programFiles = [Environment]::GetFolderPath('ProgramFiles')
+if (-not $executable.StartsWith($programFiles + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'SYSTEM tasks require an all-users installation under Program Files' }
 Assert-Protected $executable
-Assert-Protected ([IO.Path]::GetDirectoryName($executable))
-$root = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'NetSec\jobs'
-if (-not (Test-Path -LiteralPath $root)) {
-    $null = New-Item -ItemType Directory -Path $root -Force
+$directory = [IO.Path]::GetDirectoryName($executable)
+while ($directory.Length -ge $programFiles.Length) {
+    Assert-Protected $directory
+    $directory = [IO.Path]::GetDirectoryName($directory)
+}
+function New-ProtectedDirectory([string]$Path) {
+    if (Test-Path -LiteralPath $Path) { Assert-Protected $Path; return }
+    $null = New-Item -ItemType Directory -Path $Path
     $acl = [Security.AccessControl.DirectorySecurity]::new()
     $acl.SetAccessRuleProtection($true, $false)
     foreach ($sidText in @('S-1-5-18', 'S-1-5-32-544')) {
         $sid = [Security.Principal.SecurityIdentifier]::new($sidText)
         $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
     }
-    Set-Acl -LiteralPath $root -AclObject $acl
+    Set-Acl -LiteralPath $Path -AclObject $acl
+    Assert-Protected $Path
 }
-Assert-Protected $root
+$base = Join-Path ([Environment]::GetFolderPath('CommonApplicationData')) 'NetSec'
+New-ProtectedDirectory $base
+$root = Join-Path $base 'jobs'
+New-ProtectedDirectory $root
 $json = $request.job | ConvertTo-Json -Depth 50 -Compress
 $hash = [Security.Cryptography.SHA256]::Create()
 try { $digest = [BitConverter]::ToString($hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($json))).Replace('-', '').ToLowerInvariant() }

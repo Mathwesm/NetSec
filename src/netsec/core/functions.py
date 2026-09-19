@@ -1,7 +1,7 @@
 """Check pure function bodies symbolically, including unused declarations."""
 
 from netsec.core.lexer import TYPES
-from netsec.core.model import Expression, Parameter, Span, Statement, fail
+from netsec.core.model import MAX_EXPRESSION_HEIGHT, Expression, Parameter, Span, Statement, fail
 from netsec.core.values import ClassType, Function, Scope, Value, convert, require
 
 
@@ -40,7 +40,17 @@ def declare_class(statement: Statement, scope: Scope) -> None:
         validate_type(field.type_name, scope, field.span)
         names.define(field.name, Value(field.type_name, ""), field.span)
     scope.define(statement.name, Value("class", statement.name), statement.span)
-    shape = ClassType(statement.parameters)
+    depth = 1 + max(
+        (
+            scope.class_type(field.type_name, field.span).depth
+            for field in statement.parameters
+            if field.type_name not in TYPES
+        ),
+        default=0,
+    )
+    if depth > MAX_EXPRESSION_HEIGHT:
+        fail("E_LIMIT", "Class composition exceeds 100 levels", statement.span)
+    shape = ClassType(statement.parameters, depth)
     scope.classes[statement.name] = shape
     for method in statement.body:
         names.define(method.name, Value("function", ""), method.span)

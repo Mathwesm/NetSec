@@ -20,13 +20,14 @@ def cli_arguments() -> list[str]:
     return [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, "-m", "netsec"]
 
 
-def _linux_preflight(job: AutomationJob) -> None:
+def _linux_preflight(job: AutomationJob, *, install: bool) -> None:
     systemd.require_systemd()
     # A privileged job must never load interpreter/package code writable by regular users.
-    systemd.protected_path(Path(sys.executable).resolve())
-    systemd.protected_path(Path(__file__).resolve())
+    if install:
+        systemd.protected_path(Path(sys.executable).resolve())
+        systemd.protected_path(Path(__file__).resolve())
     systemd.protected_path(systemd.CONFIG)
-    if job.secrets_file is not None:
+    if install and job.secrets_file is not None:
         systemd.protected_path(job.secrets_file)
         if not job.secrets_file.is_file() or job.secrets_file.stat().st_mode & (
             stat.S_IRWXG | stat.S_IRWXO
@@ -78,7 +79,7 @@ def manage(job: AutomationJob, operation: str, *, apply: bool) -> dict[str, obje
         return _windows(job, operation)
     if platform.system() != "Linux":
         raise RuntimeFailureError("Persistent jobs support Windows and systemd Linux")
-    _linux_preflight(job)
+    _linux_preflight(job, install=operation == "install")
     name = f"netsec-job-{job.name}"
     if operation == "status":
         return {
