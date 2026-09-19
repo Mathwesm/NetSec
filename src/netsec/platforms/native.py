@@ -58,11 +58,10 @@ class NativeAdapter:
         self.authorized_servers = ()
         resources = tuple(item.resource for item in plan.instructions if item.resource is not None)
         self.servers.preflight(resources, apply=self.apply)
-        self.authorized_servers = tuple(
-            item for item in plan.instructions if item.operation == "server"
-        )
+        servers = tuple(item for item in plan.instructions if item.operation == "server")
         rules = policy_rules(plan)
         if not rules:
+            self.authorized_servers = servers
             return
         if not self.apply:
             raise RuntimeFailureError(
@@ -80,6 +79,7 @@ class NativeAdapter:
         ):
             raise RuntimeFailureError("Blocking management ports requires --allow-management-port")
         self.authorized = frozenset(rules)
+        self.authorized_servers = servers
 
     def check(self, instruction: Instruction) -> ProbeResult:
         """Probe the explicit endpoint from this machine."""

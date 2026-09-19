@@ -22,7 +22,7 @@ jobs:
         run: |
           pipx install poetry==2.4.1
           sudo apt-get update
-          sudo apt-get install -y nginx dnsmasq-base nftables iproute2 python3.12-venv
+          sudo apt-get install -y nginx dnsmasq-base nftables iproute2 python3.12-venv wireguard-tools
       - name: Install root-owned application for privileged jobs
         run: |
           sudo mkdir /root/netsec-validation
@@ -33,6 +33,8 @@ jobs:
           sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /root/netsec-validation install --no-interaction
       - name: Validate actual services, recurring jobs and retained evidence
         run: sudo /root/netsec-validation/.venv/bin/python /root/netsec-validation/lab/professional/validate_services.py
+      - name: Validate persistent VPN creation and interface recovery
+        run: sudo /root/netsec-validation/.venv/bin/python /root/netsec-validation/lab/professional/validate_vpn_job.py
       - name: Collect service diagnostics
         if: failure()
         run: sudo journalctl --no-pager -n 150 -u 'netsec-*'

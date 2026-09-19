@@ -59,6 +59,12 @@ class AutomationJob(BaseModel):
                 NetworkAdapter(self.timeout).preflight(plan)
         if self.secrets_file is not None and not self.secrets_file.is_absolute():
             raise ValueError("Persistent jobs require an absolute protected secrets path")
+        if self.inventory is not None and any(
+            not path.is_absolute()
+            for target in self.inventory.targets.values()
+            for path in (target.identity_file, target.known_hosts_file)
+        ):
+            raise ValueError("Persistent jobs require absolute SSH key and known_hosts paths")
         return self
 
 

@@ -118,6 +118,25 @@ def test_native_needs_preflight_and_can_remove_only_selected_policy() -> None:
     backend.remove.assert_called_once_with(rule())
 
 
+def test_failed_firewall_preflight_revokes_server_authorization() -> None:
+    backend = Mock()
+    backend.inspect.return_value = NativeState(
+        platform="linux", addresses=("192.0.2.10",), can_manage=True
+    )
+    adapter = NativeAdapter(1, apply=True, backend=backend)
+    manager = Mock()
+    adapter.servers = manager
+    source = 'server http "site" port 8080 response "content";'
+    plan = compile_source(wrap(source))
+    adapter.preflight(plan)
+    rejected = compile_source(wrap(source + "firewall deny port 22 protocol tcp;"))
+    with pytest.raises(RuntimeFailureError, match="management ports"):
+        adapter.preflight(rejected)
+    with pytest.raises(RuntimeFailureError, match="Server instruction did not pass"):
+        adapter.server(plan.instructions[0])
+    manager.ensure.assert_not_called()
+
+
 def test_nft_idempotence_checks_expression_not_only_tag(monkeypatch: pytest.MonkeyPatch) -> None:
     call = Mock(side_effect=[inventory(), inventory()])
     monkeypatch.setattr("netsec.platforms.linux.command", call)

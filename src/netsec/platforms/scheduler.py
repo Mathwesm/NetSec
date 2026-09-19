@@ -22,6 +22,8 @@ def cli_arguments() -> list[str]:
 
 def _linux_preflight(job: AutomationJob, *, install: bool) -> None:
     systemd.require_systemd()
+    if install and job.kind == "vpn" and job.secrets_file is None:
+        raise RuntimeFailureError("Persistent VPN jobs require a secrets_file available at boot")
     # A privileged job must never load interpreter/package code writable by regular users.
     if install:
         systemd.protected_path(Path(sys.executable).resolve())

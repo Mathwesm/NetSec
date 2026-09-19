@@ -1,3 +1,4 @@
+import base64
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -8,10 +9,12 @@ from netsec.automation import AutomationJob, run_job
 from netsec.core.compiler import compile_source
 from netsec.core.model import NetSecError, Source
 from netsec.core.resources import ServerResource
-from netsec.platforms import systemd
+from netsec.platforms import scheduler, systemd
 from netsec.platforms.scheduler import service_text, timer_text
 from netsec.platforms.servers import dnsmasq_config, nginx_config
+from netsec.platforms.wireguard_models import Peer, Tunnel
 from netsec.runtime import NetworkAdapter, RuntimeFailureError
+from netsec.services.ssh import SshInventory, SshTarget
 
 
 def program(body: str) -> str:
@@ -88,6 +91,39 @@ def test_automation_rejects_writes_in_network_mode() -> None:
         )
     with pytest.raises(ValidationError, match="interval_seconds"):
         AutomationJob(name="audit", source=Source(text="report 1;"), interval_seconds=1)
+
+
+def test_persistent_ssh_rejects_paths_dependent_on_working_directory(tmp_path: Path) -> None:
+    inventory = SshInventory(
+        targets={
+            "192.0.2.10": SshTarget(
+                user="netsec", identity_file=Path("key"), known_hosts_file=tmp_path / "hosts"
+            )
+        }
+    )
+    with pytest.raises(ValidationError, match="absolute SSH"):
+        AutomationJob(
+            name="audit", mode="ssh", source=Source(text="report 1;"), inventory=inventory
+        )
+
+
+def test_vpn_scheduler_requires_a_boot_available_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    tunnel = Tunnel(
+        interface="nswg0",
+        address="10.66.0.1/24",
+        peers=(
+            Peer(
+                public_key=base64.b64encode(bytes([1]) * 32).decode("ascii"),
+                allowed_ips=("10.66.0.2/32",),
+            ),
+        ),
+    )
+    job = AutomationJob(name="vpn", kind="vpn", tunnel=tunnel)
+    monkeypatch.setattr(systemd, "require_systemd", lambda: None)
+    monkeypatch.setattr(systemd, "protected_path", lambda _: None)
+    monkeypatch.setattr(systemd, "owned_text", lambda _: None)
+    with pytest.raises(RuntimeFailureError, match="VPN jobs require a secrets_file"):
+        scheduler._linux_preflight(job, install=True)
 
 
 def test_automation_executes_and_retains_separate_run_evidence(tmp_path: Path) -> None:
