@@ -144,3 +144,4 @@ def test_immutable_revision_repairs_drift_without_destroying_history(
     assert repaired != first
     assert (first / "config").read_text(encoding="utf-8") == "drift"
     assert (repaired / "config").read_text(encoding="utf-8") == "expected"
+    assert systemd.revision(tmp_path, {"config": "expected"}) == repaired

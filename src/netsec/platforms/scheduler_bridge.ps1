@@ -35,7 +35,8 @@ function Assert-NoReparse([string]$Path) {
     $item = Get-Item -LiteralPath $Path -Force
     while ($item) {
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'Scheduler paths cannot traverse reparse points' }
-        $item = if ($item.PSIsContainer) { $item.Parent } else { $item.Directory }
+        # Parent/Directory return raw .NET objects, without PowerShell's PSIsContainer adapter.
+        $item = if ($item -is [IO.DirectoryInfo]) { $item.Parent } else { $item.Directory }
     }
 }
 function Assert-Protected([string]$Path) {

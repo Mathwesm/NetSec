@@ -36,7 +36,7 @@ def protected_path(path: Path) -> None:
             info = entry.stat()
             if info.st_uid != 0 or info.st_mode & _WRITE_BITS:
                 raise RuntimeFailureError(
-                    "Privileged configuration must be root-owned and protected"
+                    f"Privileged path must be root-owned and protected: {entry}"
                 )
 
 
@@ -82,14 +82,10 @@ def revision(root: Path, files: dict[str, str], *, private: bool = False) -> Pat
     digest = hashlib.sha256(repr(sorted(files.items())).encode("utf-8")).hexdigest()[:20]
     destination = root / digest
     if destination.exists():
-        protected_path(destination)
-        if all(
-            (destination / name).is_file()
-            and not (destination / name).is_symlink()
-            and (destination / name).read_text(encoding="utf-8") == content
-            for name, content in files.items()
-        ):
-            return destination
+        candidates = [destination, *sorted(root.glob(f"{digest}-*"))]
+        for candidate in candidates:
+            if _intact(candidate, files):
+                return candidate
         destination = root / f"{digest}-{uuid4().hex[:8]}"
     destination.mkdir(parents=True, mode=0o700 if private else 0o755)
     for name, content in files.items():
@@ -98,6 +94,19 @@ def revision(root: Path, files: dict[str, str], *, private: bool = False) -> Pat
             stream.write(content)
         path.chmod(0o600 if private else 0o644)
     return destination
+
+
+def _intact(directory: Path, files: dict[str, str]) -> bool:
+    try:
+        protected_path(directory)
+        for name, content in files.items():
+            path = directory / name
+            protected_path(path)
+            if not path.is_file() or path.read_text(encoding="utf-8") != content:
+                return False
+    except (RuntimeFailureError, OSError, UnicodeError):
+        return False
+    return True
 
 
 def unit_state(name: str, property_name: str) -> str:

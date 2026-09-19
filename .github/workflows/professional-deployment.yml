@@ -25,15 +25,14 @@ jobs:
           sudo apt-get install -y nginx dnsmasq-base nftables iproute2 python3.12-venv
       - name: Install root-owned application for privileged jobs
         run: |
-          sudo mkdir /opt/netsec-validation
-          sudo cp -a "$GITHUB_WORKSPACE/." /opt/netsec-validation/
-          sudo chown -R root:root /opt/netsec-validation
-          sudo chmod -R go-w /opt/netsec-validation
-          sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /opt/netsec-validation env use /usr/bin/python3.12
-          sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /opt/netsec-validation install --no-interaction
+          sudo mkdir /root/netsec-validation
+          sudo cp -a "$GITHUB_WORKSPACE/." /root/netsec-validation/
+          sudo chown -R root:root /root/netsec-validation
+          sudo chmod -R go-w /root/netsec-validation
+          sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /root/netsec-validation env use /usr/bin/python3.12
+          sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /root/netsec-validation install --no-interaction
       - name: Validate actual services, recurring jobs and retained evidence
-        working-directory: /opt/netsec-validation
-        run: sudo .venv/bin/python lab/professional/validate_services.py
+        run: sudo /root/netsec-validation/.venv/bin/python /root/netsec-validation/lab/professional/validate_services.py
       - name: Collect service diagnostics
         if: failure()
         run: sudo journalctl --no-pager -n 150 -u 'netsec-*'
@@ -41,7 +40,7 @@ jobs:
         if: always()
         with:
           name: systemd-services-evidence
-          path: /opt/netsec-validation/data/processed/
+          path: data/processed/
 
   windows-external-firewall:
     runs-on: windows-2025

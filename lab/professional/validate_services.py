@@ -79,6 +79,7 @@ play "deploy" targets local {{
             and results["timer_enabled"] == "enabled"
             and results["service_enabled"] == "enabled"
             and results["durable_evidence"]
+            and results["job_idempotent"]
         )
         results["success"] = bool(success)
     finally:
@@ -101,7 +102,9 @@ play "deploy" targets local {{
 
 def _validate_job(job: AutomationJob, results: dict[str, object]) -> None:
     results["job_install"] = manage(job, "install", apply=True)
-    results["job_repeat"] = manage(job, "install", apply=True)
+    repeated = manage(job, "install", apply=True)
+    results["job_repeat"] = repeated
+    results["job_idempotent"] = repeated["status"] == "unchanged"
     job_unit = f"netsec-job-{job.name}.service"
     command("systemctl", ["start", job_unit])
     deadline = time.monotonic() + 20
