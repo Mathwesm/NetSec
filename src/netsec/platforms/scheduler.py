@@ -50,9 +50,7 @@ def service_text(job: AutomationJob, manifest: Path, executable: list[str]) -> s
         "--output-root",
         f"/var/lib/netsec/jobs/{job.name}",
     ]
-    environment = (
-        f"EnvironmentFile={systemd.quote(str(job.secrets_file))}\n" if job.secrets_file else ""
-    )
+    environment = _environment_file(job.secrets_file) if job.secrets_file else ""
     return (
         f"{systemd.OWNER}\n[Unit]\nDescription=NetSec job {job.name}\n"
         "Wants=network-online.target\nAfter=network-online.target\n"
@@ -61,6 +59,14 @@ def service_text(job: AutomationJob, manifest: Path, executable: list[str]) -> s
         "WorkingDirectory=/\nTimeoutStartSec=300\nTimeoutStopSec=15\n"
         "[Install]\nWantedBy=multi-user.target\n"
     )
+
+
+def _environment_file(path: Path) -> str:
+    # Unlike ExecStart, EnvironmentFile parses a literal path, not a quoted argument.
+    value = path.as_posix()
+    if value != value.strip() or any(not char.isprintable() or char in "*?[]\\" for char in value):
+        raise RuntimeFailureError("Secrets path cannot contain glob patterns or control characters")
+    return "EnvironmentFile=" + value.replace("%", "%%") + "\n"
 
 
 def timer_text(job: AutomationJob) -> str:

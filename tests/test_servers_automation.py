@@ -158,6 +158,21 @@ def test_systemd_units_escape_paths_and_include_boot_and_periodic_triggers() -> 
     assert systemd.quote('a%$"b') == '"a%%$$\\"b"'
 
 
+def test_environment_file_uses_literal_path_not_execstart_quoting(tmp_path: Path) -> None:
+    secret_file = tmp_path / "key %n $name.env"
+    job = AutomationJob(name="audit", source=Source(text="report 1;"), secrets_file=secret_file)
+    text = service_text(job, tmp_path / "job.json", ["/usr/bin/netsec"])
+    directive = next(line for line in text.splitlines() if line.startswith("EnvironmentFile="))
+    assert directive == "EnvironmentFile=" + secret_file.as_posix().replace("%", "%%")
+
+
+@pytest.mark.parametrize("name", ["key*.env", "key?.env", "key[1].env", "key\n.env"])
+def test_environment_file_rejects_patterns_and_newlines(tmp_path: Path, name: str) -> None:
+    job = AutomationJob(name="audit", source=Source(text="report 1;"), secrets_file=tmp_path / name)
+    with pytest.raises(RuntimeFailureError, match="Secrets path"):
+        service_text(job, tmp_path / "job.json", ["/usr/bin/netsec"])
+
+
 def test_unowned_systemd_unit_is_never_replaced(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
