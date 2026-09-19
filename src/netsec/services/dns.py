@@ -12,11 +12,14 @@ from netsec.core.domains import dns_name
 from netsec.services.probes import ProbeResult
 
 
-def probe_dns(server: str, name: str, expected: str, timeout: float) -> ProbeResult:
+def probe_dns(
+    server: str, name: str, expected: str, timeout: float, *, port: int = 53
+) -> ProbeResult:
     """Validate a typed DNS answer with a bounded lifetime and no OS search suffixes."""
     address = ip_address(expected)
     resolver = dns.resolver.Resolver(configure=False)
     resolver.nameservers = [str(ip_address(server))]
+    resolver.port = port
     resolver.timeout = timeout
     resolver.lifetime = timeout
     record_type = "AAAA" if isinstance(address, IPv6Address) else "A"

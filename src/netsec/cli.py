@@ -13,12 +13,13 @@ from uuid import uuid4
 from loguru import logger
 from pydantic import ValidationError
 
-from netsec import vpn_cli
+from netsec import automation_cli, vpn_cli
 from netsec.agent import AgentRequest, handle
 from netsec.config import Settings
 from netsec.core.compiler import Plan, compile_source
 from netsec.core.lexer import tokenize
 from netsec.core.model import NetSecError, Source
+from netsec.core.modules import load_source
 from netsec.core.parser import parse
 from netsec.core.values import MAX_PORT
 from netsec.editor import EditorRequest, analyze
@@ -41,7 +42,6 @@ from netsec.services.ssh import SshAdapter, SshInventory
 from netsec.utils.logger import setup_logging
 
 _MAX_INPUT = 1_000_000
-_DNS_PORT = 53
 
 
 def argument_parser() -> argparse.ArgumentParser:
@@ -49,11 +49,21 @@ def argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="netsec", description="Typed network security language")
     commands = parser.add_subparsers(dest="command", required=True)
     vpn_cli.register(commands)
-    for name in ("tokens", "ast", "check", "compile", "preview", "run", "firewall-remove"):
+    automation_cli.register(commands)
+    for name in (
+        "tokens",
+        "ast",
+        "check",
+        "compile",
+        "preview",
+        "run",
+        "firewall-remove",
+        "server-remove",
+    ):
         command = commands.add_parser(name)
         command.add_argument("file", type=Path)
         command.add_argument("--output", type=Path, help="New output file; never overwrites")
-        if name in {"run", "firewall-remove"}:
+        if name in {"run", "firewall-remove", "server-remove"}:
             _run_arguments(command)
     commands.add_parser("doctor", help="Read native firewall prerequisites without elevation")
     commands.add_parser("agent", help="Process one constrained SSH source request from stdin")
@@ -91,6 +101,9 @@ def _run_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--inventory", type=Path, help="Required labelled-container inventory")
     parser.add_argument("--docker-executable", default="docker")
     parser.add_argument("--timeout", type=float)
+    parser.add_argument(
+        "--workers", type=int, default=1, help="Parallel checks (1..32); fail-fast remains serial"
+    )
     parser.add_argument("--journal-root", type=Path, default=Path("data/processed"))
 
 
@@ -145,14 +158,14 @@ def _adapter(arguments: argparse.Namespace, settings: Settings, source: Source) 
 def _source_command(arguments: argparse.Namespace) -> int:
     if arguments.output is not None and arguments.output.exists():
         raise RuntimeFailureError("Output file already exists; choose a new path before execution")
-    source = Source(text=_read(arguments.file), filename=str(arguments.file))
+    source = load_source(arguments.file)
     if arguments.command == "tokens":
         _emit([asdict(token) for token in tokenize(source)], arguments.output)
         return 0
     if arguments.command == "ast":
         _emit(asdict(parse(source)), arguments.output)
         return 0
-    plan = compile_source(source.text, source.filename)
+    plan = compile_source(source.text, source.filename, modules=source.modules)
     if arguments.command == "check":
         _emit({"valid": True, "instructions": len(plan.instructions)}, arguments.output)
         return 0
@@ -177,10 +190,14 @@ def _execute_source(arguments: argparse.Namespace, source: Source, plan: Plan) -
     settings = Settings() if arguments.timeout is None else Settings(timeout=arguments.timeout)
     setup_logging(settings.log_dir)
     adapter = _adapter(arguments, settings, source)
-    if arguments.command == "firewall-remove":
+    if arguments.command in {"firewall-remove", "server-remove"}:
         if not isinstance(adapter, NativeAdapter | SshAdapter):
             raise RuntimeFailureError("Firewall removal requires --mode local or ssh")
-        results = adapter.remove(plan)
+        results = (
+            adapter.remove_servers(plan)
+            if arguments.command == "server-remove"
+            else adapter.remove(plan)
+        )
         success = all(item.success for item in results)
         _emit({"success": success, "results": [asdict(item) for item in results]}, arguments.output)
         return 0 if success else 1
@@ -199,6 +216,7 @@ def _run_plan(arguments: argparse.Namespace, plan: Plan, adapter: Adapter) -> in
         arguments.mode,
         fail_fast=arguments.fail_fast,
         on_record=journal.append if journal else None,
+        workers=arguments.workers,
     )
     logger.bind(run_id=str(uuid4())).info(
         "Execution completed | instructions={} failed={}",
@@ -217,11 +235,13 @@ def _run_plan(arguments: argparse.Namespace, plan: Plan, adapter: Adapter) -> in
 
 
 def _dispatch(arguments: argparse.Namespace) -> int:
-    if arguments.command == "vpn":
+    if arguments.command in {"automation", "vpn"}:
         if arguments.output is not None and arguments.output.exists():
             raise RuntimeFailureError("Output file already exists")
-        _emit(vpn_cli.run(arguments), arguments.output)
-        return 0
+        handler = automation_cli.run if arguments.command == "automation" else vpn_cli.run
+        result = handler(arguments)
+        _emit(result, arguments.output)
+        return 1 if result.get("success") is False else 0
     if arguments.command in {"doctor", "agent", "editor"}:
         return _utility_command(arguments.command)
     if arguments.command == "lab-test":
@@ -246,7 +266,7 @@ def _utility_command(command: str) -> int:
         request = AgentRequest.model_validate_json(sys.stdin.read(6_100_001))
         _emit(asdict(handle(request)))
     else:
-        editor_request = EditorRequest.model_validate_json(sys.stdin.read(_MAX_INPUT + 1))
+        editor_request = EditorRequest.model_validate_json(sys.stdin.read(6_100_001))
         _emit(analyze(editor_request))
     return 0
 
@@ -256,15 +276,16 @@ def _probe_command(arguments: argparse.Namespace) -> int:
         raise RuntimeFailureError("Port must be between 1 and 65535")
     settings = Settings(timeout=arguments.timeout)
     if arguments.dns_name or arguments.expect:
-        if (
-            not arguments.dns_name
-            or not arguments.expect
-            or arguments.port != _DNS_PORT
-            or arguments.service
-        ):
-            raise RuntimeFailureError("DNS probes require port 53, --dns-name and --expect only")
+        if not arguments.dns_name or not arguments.expect or arguments.service:
+            raise RuntimeFailureError(
+                "DNS probes require --dns-name and --expect without --service"
+            )
         result = probe_dns(
-            str(arguments.host), arguments.dns_name, arguments.expect, settings.timeout
+            str(arguments.host),
+            arguments.dns_name,
+            arguments.expect,
+            settings.timeout,
+            port=arguments.port,
         )
     else:
         result = probe(str(arguments.host), arguments.port, arguments.service, settings.timeout)

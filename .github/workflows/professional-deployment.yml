@@ -1,0 +1,70 @@
+name: Professional deployment
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  systemd-services:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install isolated runner dependencies
+        run: |
+          pipx install poetry==2.4.1
+          sudo apt-get update
+          sudo apt-get install -y nginx dnsmasq-base nftables iproute2
+      - name: Install root-owned application for privileged jobs
+        run: |
+          sudo mkdir /opt/netsec-validation
+          sudo cp -a "$GITHUB_WORKSPACE/." /opt/netsec-validation/
+          sudo chown -R root:root /opt/netsec-validation
+          sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /opt/netsec-validation install --no-interaction
+      - name: Validate actual services, recurring jobs and retained evidence
+        working-directory: /opt/netsec-validation
+        run: sudo .venv/bin/python lab/professional/validate_services.py
+      - name: Collect service diagnostics
+        if: failure()
+        run: sudo journalctl --no-pager -n 150 -u 'netsec-*'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: systemd-services-evidence
+          path: /opt/netsec-validation/data/processed/
+
+  windows-external-firewall:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install project and build the isolated network client
+        shell: powershell
+        run: |
+          pipx install poetry==2.4.1
+          poetry install --no-interaction
+          New-Item -ItemType Directory -Path data -Force | Out-Null
+          go build -o data/netsec-probe.exe lab/professional/windows_probe.go
+          if ($LASTEXITCODE -ne 0) { throw 'Windows network probe build failed' }
+          Start-Service docker
+          docker info
+      - name: Prove inbound filtering across Windows network compartments
+        run: poetry run python lab/professional/validate_windows_traffic.py --apply --probe data/netsec-probe.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-external-firewall-evidence
+          path: data/processed/

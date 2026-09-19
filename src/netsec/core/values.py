@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import operator
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from ipaddress import ip_address, ip_network
 
 from netsec.core.model import Expression, Parameter, Scalar, Span, fail
@@ -38,6 +38,15 @@ class Value:
 
     type_name: str
     data: Scalar
+    fields: tuple[tuple[str, Value], ...] = ()
+
+
+@dataclass(slots=True)
+class ClassType:
+    """Describe nominal immutable fields and pure methods."""
+
+    fields: tuple[Parameter, ...]
+    methods: dict[str, Function] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +64,7 @@ class Scope:
         self.parent = parent
         self.symbols: dict[str, Symbol] = {}
         self.functions: dict[str, Function] = {}
+        self.classes: dict[str, ClassType] = {}
         self.budget: EvaluationBudget = parent.budget if parent else EvaluationBudget()
         self.call_depth: int = parent.call_depth if parent else 0
 
@@ -86,6 +96,14 @@ class Scope:
         if self.parent is not None:
             return self.parent.function(name, span)
         fail("E_UNDEFINED", f"Function {name!r} is not declared", span)
+
+    def class_type(self, name: str, span: Span) -> ClassType:
+        """Resolve an explicitly declared nominal class."""
+        if name in self.classes:
+            return self.classes[name]
+        if self.parent is not None:
+            return self.parent.class_type(name, span)
+        fail("E_TYPE", f"Unknown class type {name!r}", span)
 
 
 def require(value: Value, expected: str, span: Span) -> Value:
@@ -145,20 +163,59 @@ def evaluate(expression: Expression, scope: Scope) -> Value:
         case "binary":
             left, right = (evaluate(item, scope) for item in expression.operands)
             return _binary(expression, left, right)
-        case "call":
-            return _call(expression, scope)
+        case _:
+            return _object_expression(expression, scope)
+
+
+def _object_expression(expression: Expression, scope: Scope) -> Value:
+    if expression.kind == "call":
+        if scope.lookup(str(expression.value), expression.span).type_name == "class":
+            return _construct(expression, scope)
+        return _call(expression, scope)
+    receiver = evaluate(expression.operands[0], scope)
+    if expression.kind == "member":
+        for name, value in receiver.fields:
+            if name == expression.value:
+                return value
+        fail("E_MEMBER", f"Unknown field {expression.value!r}", expression.span)
+    shape = scope.class_type(receiver.type_name, expression.span)
+    function = shape.methods.get(str(expression.value))
+    if function is None:
+        fail("E_MEMBER", f"Unknown method {expression.value!r}", expression.span)
+    return _invoke(function, expression, scope, receiver)
+
+
+def _construct(expression: Expression, scope: Scope) -> Value:
+    name = str(expression.value)
+    shape = scope.class_type(name, expression.span)
+    if len(shape.fields) != len(expression.operands):
+        fail("E_ARITY", "Constructor argument count does not match fields", expression.span)
+    fields = tuple(
+        (field.name, require(evaluate(argument, scope), field.type_name, argument.span))
+        for field, argument in zip(shape.fields, expression.operands, strict=True)
+    )
+    return Value(name, "", fields)
 
 
 def _call(expression: Expression, scope: Scope) -> Value:
     function = scope.function(str(expression.value), expression.span)
-    if len(expression.operands) != len(function.parameters):
+    return _invoke(function, expression, scope)
+
+
+def _invoke(
+    function: Function, expression: Expression, scope: Scope, receiver: Value | None = None
+) -> Value:
+    arguments = expression.operands if receiver is None else expression.operands[1:]
+    if len(arguments) != len(function.parameters):
         fail("E_ARITY", "Function argument count does not match its declaration", expression.span)
     if scope.call_depth >= MAX_CALL_DEPTH:
         fail("E_LIMIT", "Function call depth exceeds 32", expression.span)
     local = Scope(function.closure)
     local.budget = scope.budget
     local.call_depth = scope.call_depth + 1
-    for parameter, argument in zip(function.parameters, expression.operands, strict=True):
+    if receiver is not None:
+        local.define("self", receiver, expression.span)
+    for parameter, argument in zip(function.parameters, arguments, strict=True):
         value = require(evaluate(argument, scope), parameter.type_name, argument.span)
         local.define(parameter.name, value, parameter.span)
     return require(evaluate(function.expression, local), function.result_type, expression.span)
@@ -180,7 +237,7 @@ def _binary(expression: Expression, left: Value, right: Value) -> Value:
         return Value("bool", ip_address(str(left.data)) in ip_network(str(right.data)))
     require(right, left.type_name, span)
     if name in {"==", "!="}:
-        result = left.data == right.data
+        result = left == right
         return Value("bool", result if name == "==" else not result)
     if name in {"and", "or"}:
         require(left, "bool", span)

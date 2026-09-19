@@ -2,6 +2,31 @@ from netsec.editor import EditorRequest, analyze
 from netsec.evaluation import wrap
 
 
+def test_imported_class_members_complete_in_an_unfinished_expression() -> None:
+    text = 'import "server.netsec";\nServer node = Server(port(22));\nreport node.'
+    result = analyze(
+        EditorRequest(
+            text=text,
+            filename="main.netsec",
+            line=4,
+            modules={"server.netsec": "class Server { port management; fn base() -> int = 8000; }"},
+        )
+    )
+    assert {item["label"]: item["type"] for item in result["completions"]} == {
+        "management": "port",
+        "base": "fn",
+    }
+
+
+def test_class_methods_complete_self_fields_without_leaking_self() -> None:
+    result = analyze(
+        EditorRequest(text="class Server { port management; fn value() -> port = self.", line=2)
+    )
+    assert "management" in {item["label"] for item in result["completions"]}
+    result = analyze(EditorRequest(text="class Server { port management; }\nreport 1;", line=3))
+    assert "self" not in {item["label"] for item in result["symbols"]}
+
+
 def test_unsaved_semantic_error_reports_its_location() -> None:
     result = analyze(EditorRequest(text="int value = true;", filename="draft.netsec"))
     assert result["diagnostics"][0]["code"] == "E_TYPE"

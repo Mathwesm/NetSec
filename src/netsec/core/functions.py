@@ -1,22 +1,50 @@
 """Check pure function bodies symbolically, including unused declarations."""
 
-from netsec.core.model import Expression, Statement, fail
-from netsec.core.values import Function, Scope, Value, convert, require
+from netsec.core.lexer import TYPES
+from netsec.core.model import Expression, Parameter, Span, Statement, fail
+from netsec.core.values import ClassType, Function, Scope, Value, convert, require
 
 
 def declare_function(statement: Statement, scope: Scope) -> None:
     """Validate a declaration before making it callable; recursive definitions are rejected."""
+    function = _validate_function(statement, scope)
+    scope.define(statement.name, Value("function", statement.name), statement.span)
+    scope.functions[statement.name] = function
+
+
+def validate_type(name: str, scope: Scope, span: Span) -> None:
+    """Reject undeclared field, parameter and return types even in unused code."""
+    if name not in TYPES:
+        scope.class_type(name, span)
+
+
+def _validate_function(statement: Statement, scope: Scope, receiver: str = "") -> Function:
     if statement.expression is None:
         fail("E_FUNCTION", "Function requires a result expression", statement.span)
     local = Scope(scope)
+    if receiver:
+        local.define("self", Value(receiver, ""), statement.span)
+    validate_type(statement.type_name, scope, statement.span)
     for parameter in statement.parameters:
+        validate_type(parameter.type_name, scope, parameter.span)
         local.define(parameter.name, Value(parameter.type_name, 0), parameter.span)
     result = infer(statement.expression, local)
     require(Value(result, 0), statement.type_name, statement.expression.span)
-    scope.define(statement.name, Value("function", statement.name), statement.span)
-    scope.functions[statement.name] = Function(
-        statement.parameters, statement.type_name, statement.expression, scope
-    )
+    return Function(statement.parameters, statement.type_name, statement.expression, scope)
+
+
+def declare_class(statement: Statement, scope: Scope) -> None:
+    """Validate immutable class fields before registering ordered pure methods."""
+    names = Scope()
+    for field in statement.parameters:
+        validate_type(field.type_name, scope, field.span)
+        names.define(field.name, Value(field.type_name, ""), field.span)
+    scope.define(statement.name, Value("class", statement.name), statement.span)
+    shape = ClassType(statement.parameters)
+    scope.classes[statement.name] = shape
+    for method in statement.body:
+        names.define(method.name, Value("function", ""), method.span)
+        shape.methods[method.name] = _validate_function(method, scope, statement.name)
 
 
 def infer(expression: Expression, scope: Scope) -> str:
@@ -26,15 +54,9 @@ def infer(expression: Expression, scope: Scope) -> str:
     if expression.kind == "name":
         return scope.lookup(str(expression.value), expression.span).type_name
     arguments = [infer(item, scope) for item in expression.operands]
-    if expression.kind == "call":
-        function = scope.function(str(expression.value), expression.span)
-        if len(arguments) != len(function.parameters):
-            fail(
-                "E_ARITY", "Function argument count does not match its declaration", expression.span
-            )
-        for actual, parameter in zip(arguments, function.parameters, strict=True):
-            require(Value(actual, 0), parameter.type_name, expression.span)
-        return function.result_type
+    if expression.kind in {"call", "member", "method"}:
+        handler = _call_type if expression.kind == "call" else _member_type
+        return handler(expression, scope, arguments)
     if expression.kind == "convert":
         return _conversion(expression, arguments[0])
     if expression.kind == "unary":
@@ -42,6 +64,37 @@ def infer(expression: Expression, scope: Scope) -> str:
         require(Value(arguments[0], 0), expected, expression.span)
         return expected
     return _binary(expression, arguments)
+
+
+def _check_arguments(arguments: list[str], parameters: tuple[Parameter, ...], span: Span) -> None:
+    if len(arguments) != len(parameters):
+        fail("E_ARITY", "Argument count does not match declaration", span)
+    for actual, parameter in zip(arguments, parameters, strict=True):
+        require(Value(actual, 0), parameter.type_name, span)
+
+
+def _call_type(expression: Expression, scope: Scope, arguments: list[str]) -> str:
+    name = str(expression.value)
+    if scope.lookup(name, expression.span).type_name == "class":
+        _check_arguments(arguments, scope.class_type(name, expression.span).fields, expression.span)
+        return name
+    function = scope.function(name, expression.span)
+    _check_arguments(arguments, function.parameters, expression.span)
+    return function.result_type
+
+
+def _member_type(expression: Expression, scope: Scope, arguments: list[str]) -> str:
+    shape = scope.class_type(arguments[0], expression.span)
+    if expression.kind == "member":
+        for field in shape.fields:
+            if field.name == expression.value:
+                return field.type_name
+    else:
+        method = shape.methods.get(str(expression.value))
+        if method is not None:
+            _check_arguments(arguments[1:], method.parameters, expression.span)
+            return method.result_type
+    fail("E_MEMBER", f"Unknown member {expression.value!r}", expression.span)
 
 
 def _conversion(expression: Expression, actual: str) -> str:

@@ -151,3 +151,17 @@ jobs:
           path: |
             data/processed/
             dist/**/installer/*.exe
+      - name: Install for all users and validate persistent SYSTEM job
+        shell: powershell
+        run: |
+          $installer = Get-ChildItem -LiteralPath dist -Recurse -Filter 'NetSec-0.2.0-Windows-Setup.exe' | Select-Object -First 1
+          $destination = Join-Path $env:ProgramFiles 'NetSec Scheduler Smoke'
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/ALLUSERS', ('/DIR="' + $destination + '"')) -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw 'All-users installation failed' }
+          ./lab/professional/validate_scheduler.ps1 -Cli (Join-Path $destination 'cli/NetSec.exe')
+      - name: Upload scheduled execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-scheduler-evidence
+          path: data/processed/

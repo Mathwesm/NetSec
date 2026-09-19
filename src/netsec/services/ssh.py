@@ -129,7 +129,7 @@ class SshAdapter:
         self.inventory = inventory
         self.timeout = timeout
         self.apply = apply
-        self.plan = compile_source(source.text, source.filename)
+        self.plan = compile_source(source.text, source.filename, modules=source.modules)
         self.ready = False
 
     def preflight(self, plan: Plan) -> None:
@@ -138,7 +138,7 @@ class SshAdapter:
         if plan != self.plan:
             raise RuntimeFailureError("SSH plan does not match the submitted source")
         hosts = dict.fromkeys(
-            item.host for item in plan.instructions if item.operation in {"allow", "deny"}
+            item.host for item in plan.instructions if item.operation in {"allow", "deny", "server"}
         )
         if hosts and not self.apply:
             raise RuntimeFailureError("SSH firewall writes require --apply; inspect preview first")
@@ -185,4 +185,17 @@ class SshAdapter:
             self._request(item.host, "remove", index)
             for index, item in enumerate(plan.instructions)
             if item.operation in {"allow", "deny"}
+        ]
+
+    def server(self, instruction: Instruction) -> ProbeResult:
+        """Deploy the exact typed resource through the constrained remote agent."""
+        return self.firewall(instruction)
+
+    def remove_servers(self, plan: Plan) -> list[ProbeResult]:
+        """Stop source-linked owned services after fleet-wide authorization."""
+        self.preflight(plan)
+        return [
+            self._request(item.host, "remove", index)
+            for index, item in enumerate(plan.instructions)
+            if item.operation == "server"
         ]

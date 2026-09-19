@@ -1,4 +1,4 @@
-param([string]$Compiler = '')
+param([string]$Compiler = '', [string]$CertificateThumbprint = '')
 $ErrorActionPreference = 'Stop'
 $project = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 Push-Location -LiteralPath $project
@@ -16,9 +16,18 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Desktop packaging failed' }
     & (Join-Path $destination 'NetSec/NetSec.exe') check examples/05_functions.netsec
     if ($LASTEXITCODE -ne 0) { throw 'Packaged compiler smoke test failed' }
+    if ($CertificateThumbprint) {
+        foreach ($binary in @('NetSec/NetSec.exe', 'NetSec-Desktop/NetSec-Desktop.exe')) {
+            & (Join-Path $PSScriptRoot 'sign.ps1') -Target (Join-Path $destination $binary) -CertificateThumbprint $CertificateThumbprint
+        }
+    }
     if ($Compiler) {
         & $Compiler "/DBundleRoot=$destination" "/DOutputRoot=$destination/installer" packaging/windows/installer.iss
         if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed' }
+        if ($CertificateThumbprint) {
+            $installer = Get-ChildItem -LiteralPath (Join-Path $destination 'installer') -Filter '*.exe' | Select-Object -First 1
+            & (Join-Path $PSScriptRoot 'sign.ps1') -Target $installer.FullName -CertificateThumbprint $CertificateThumbprint
+        }
     }
     Write-Output "Windows package: $destination"
 } finally {

@@ -2,6 +2,8 @@
 "use strict";
 const vscode = require("vscode");
 const client = require("./client");
+const modules = require("./modules");
+const path = require("node:path");
 
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
@@ -23,6 +25,7 @@ function activate(context) {
     return client.analyze(config.get("command", "poetry"), config.get("arguments", ["run", "netsec"]),
       folder.uri.fsPath, {
         text: document.getText(), filename: document.uri.fsPath || "<editor>",
+        modules: await modules.bundle(document.uri.fsPath, document.getText()),
         line: position.line + 1,
         column: client.codepointColumn(document.lineAt(position.line).text, position.character)
       });
@@ -44,7 +47,9 @@ function activate(context) {
       const result = await analyze(document, new vscode.Position(0, 0));
       if (document.isClosed || document.version !== version) return;
       diagnostics.set(document.uri, result.diagnostics.map(item => {
-        const diagnostic = new vscode.Diagnostic(range(document, item.span), item.message,
+        const imported = item.span.filename !== document.uri.fsPath && !item.span.filename.startsWith("<");
+        const message = imported ? `${item.span.filename}:${item.span.line}: ${item.message}` : item.message;
+        const diagnostic = new vscode.Diagnostic(imported ? new vscode.Range(0, 0, 0, 1) : range(document, item.span), message,
           vscode.DiagnosticSeverity.Error);
         diagnostic.code = item.code;
         diagnostic.source = "NetSec";
@@ -72,7 +77,7 @@ function activate(context) {
           return completion;
         });
       }
-    }),
+    }, "."),
     vscode.languages.registerHoverProvider(selector, {
       async provideHover(document, position) {
         const word = document.getText(document.getWordRangeAtPosition(position));
@@ -88,7 +93,14 @@ function activate(context) {
         const word = document.getText(document.getWordRangeAtPosition(position));
         const result = await analyze(document, position);
         const symbol = result.symbols.find(item => item.label === word);
-        if (symbol?.span) return new vscode.Location(document.uri, range(document, symbol.span));
+        if (symbol?.span) {
+          if (symbol.span.filename === document.uri.fsPath || symbol.span.filename.startsWith("<")) {
+            return new vscode.Location(document.uri, range(document, symbol.span));
+          }
+          const uri = vscode.Uri.file(path.resolve(path.dirname(document.uri.fsPath), symbol.span.filename));
+          const imported = await vscode.workspace.openTextDocument(uri);
+          return new vscode.Location(uri, range(imported, symbol.span));
+        }
         return undefined;
       }
     }),

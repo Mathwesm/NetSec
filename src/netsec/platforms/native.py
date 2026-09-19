@@ -7,6 +7,7 @@ import platform
 from netsec.core.compiler import Instruction, Plan
 from netsec.platforms.linux import LinuxFirewall
 from netsec.platforms.models import MANAGEMENT_PORTS, FirewallBackend, FirewallRule
+from netsec.platforms.servers import ServerManager
 from netsec.platforms.windows import WindowsFirewall
 from netsec.runtime import RuntimeFailureError
 from netsec.services.observations import observe
@@ -48,10 +49,18 @@ class NativeAdapter:
         self.allow_management_port = allow_management_port
         self.backend = backend if backend is not None else native_backend()
         self.authorized: frozenset[FirewallRule] = frozenset()
+        self.servers = ServerManager()
+        self.authorized_servers: tuple[Instruction, ...] = ()
 
     def preflight(self, plan: Plan) -> None:
         """Validate the full local target set, privileges and management protection."""
         self.authorized = frozenset()
+        self.authorized_servers = ()
+        resources = tuple(item.resource for item in plan.instructions if item.resource is not None)
+        self.servers.preflight(resources, apply=self.apply)
+        self.authorized_servers = tuple(
+            item for item in plan.instructions if item.operation == "server"
+        )
         rules = policy_rules(plan)
         if not rules:
             return
@@ -87,3 +96,18 @@ class NativeAdapter:
         """Remove owned rules named by this source after validating local authority."""
         self.preflight(plan)
         return [self.backend.remove(rule) for rule in policy_rules(plan)]
+
+    def server(self, instruction: Instruction) -> ProbeResult:
+        """Deploy only server resources authorized by complete local preflight."""
+        if instruction not in self.authorized_servers or instruction.resource is None:
+            raise RuntimeFailureError("Server instruction did not pass native preflight")
+        return self.servers.ensure(instruction.resource)
+
+    def remove_servers(self, plan: Plan) -> list[ProbeResult]:
+        """Stop only the owned server resources present in the source."""
+        self.preflight(plan)
+        return [
+            self.servers.remove(item.resource)
+            for item in self.authorized_servers
+            if item.resource is not None
+        ]

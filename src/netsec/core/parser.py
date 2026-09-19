@@ -71,7 +71,7 @@ class Parser:
 
     def statement(self) -> Statement:
         """Dispatch a declaration or command from its leading keyword."""
-        if self.current.kind in TYPES:
+        if self.current.kind in TYPES or self.current.kind == "NAME":
             return self.binding()
         handlers: dict[str, Callable[[], Statement]] = {
             "group": self.group,
@@ -83,6 +83,9 @@ class Parser:
             "if": self.conditional,
             "repeat": self.repeat,
             "fn": self.function,
+            "class": self.class_definition,
+            "import": self.import_module,
+            "server": self.server,
         }
         handler = handlers.get(self.current.kind)
         if handler is None:
@@ -107,7 +110,34 @@ class Parser:
         self.take("=")
         value = self.expression()
         self.take(";")
-        return Statement("binding", token.span, name, token.kind, value)
+        return Statement("binding", token.span, name, token.text, value)
+
+    def import_module(self) -> Statement:
+        """Read a relative source module reference."""
+        token = self.take("import")
+        name = self._string(self.take("STRING"))
+        self.take(";")
+        return Statement("import", token.span, name=name)
+
+    def class_definition(self) -> Statement:
+        """Read immutable fields and expression-bodied methods."""
+        token = self.take("class")
+        name = self.take("NAME").text
+        self.take("{")
+        fields: list[Parameter] = []
+        methods: list[Statement] = []
+        while self.current.kind not in {"}", "EOF"}:
+            if self.current.kind == "fn":
+                methods.append(self.function())
+            else:
+                type_name = self._type()
+                field = self.take("NAME")
+                fields.append(Parameter(field.text, type_name, field.span))
+                self.take(";")
+        self.take("}")
+        return Statement(
+            "class", token.span, name=name, parameters=tuple(fields), body=tuple(methods)
+        )
 
     def group(self) -> Statement:
         """Read an inventory group."""
@@ -144,7 +174,7 @@ class Parser:
         )
 
     def _type(self) -> str:
-        if self.current.kind not in TYPES:
+        if self.current.kind not in TYPES and self.current.kind != "NAME":
             fail("E_TYPE", "Expected an explicit NetSec type", self.current.span)
         return self.take(self.current.kind).text
 
@@ -156,6 +186,33 @@ class Parser:
         value = self.expression()
         self.take(";")
         return Statement("host", token.span, name=name, expression=value)
+
+    def server(self) -> Statement:
+        """Read a declarative HTTP or DNS server resource inside a play."""
+        token = self.take("server")
+        kind = self.current.kind
+        if kind not in {"http", "dns"}:
+            fail("E_SYNTAX", "Expected http or dns server", self.current.span)
+        self.take(kind)
+        name = self._string(self.take("STRING"))
+        self.take("port")
+        port = self.expression()
+        self.take("response" if kind == "http" else "record")
+        content = self.expression()
+        expected = None
+        if kind == "dns":
+            self.take("address")
+            expected = self.expression()
+        self.take(";")
+        return Statement(
+            "server",
+            token.span,
+            name=name,
+            type_name=kind,
+            expression=port,
+            protocol=content,
+            expected=expected,
+        )
 
     def play(self) -> Statement:
         """Read a named automation targeting a declared group."""
@@ -170,10 +227,11 @@ class Parser:
         token = self.take("check")
         if self.accept("dns"):
             value = self.expression()
+            port = self.expression() if self.accept("port") else None
             self.take("expect")
             expected = self.expression()
             self.take(";")
-            return Statement("dns", token.span, expression=value, expected=expected)
+            return Statement("dns", token.span, expression=value, expected=expected, protocol=port)
         if self.accept("service"):
             value = self.expression()
             self.take(";")
@@ -223,13 +281,24 @@ class Parser:
     def expression(self, minimum: int = 1) -> Expression:
         """Parse left-associative operators according to their precedence."""
         self._enter()
-        left = self.primary()
+        left = self.postfix()
         while _PRECEDENCE.get(self.current.kind, 0) >= minimum:
             operator = self.take(self.current.kind)
             right = self.expression(_PRECEDENCE[operator.kind] + 1)
             left = Expression("binary", operator.kind, operator.span, (left, right))
         self.depth -= 1
         return left
+
+    def postfix(self) -> Expression:
+        """Resolve chained field accesses and method calls after a primary."""
+        value = self.primary()
+        while self.accept("."):
+            token = self.take("NAME")
+            if self.accept("("):
+                value = Expression("method", token.text, token.span, (value, *self.arguments()))
+            else:
+                value = Expression("member", token.text, token.span, (value,))
+        return value
 
     def primary(self) -> Expression:
         """Parse a literal, name, constructor, unary operation or parentheses."""
@@ -254,6 +323,10 @@ class Parser:
     def _name_or_call(self, token: Token) -> Expression:
         if not self.accept("("):
             return Expression("name", token.text, token.span)
+        return Expression("call", token.text, token.span, self.arguments())
+
+    def arguments(self) -> tuple[Expression, ...]:
+        """Read arguments after an opening parenthesis."""
         arguments: list[Expression] = []
         if self.current.kind != ")":
             while True:
@@ -261,7 +334,7 @@ class Parser:
                 if not self.accept(","):
                     break
         self.take(")")
-        return Expression("call", token.text, token.span, tuple(arguments))
+        return tuple(arguments)
 
     def _literal(self, token: Token) -> Expression:
         if token.kind == "INT":

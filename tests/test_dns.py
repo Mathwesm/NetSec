@@ -22,7 +22,7 @@ def test_dns_compilation_is_typed_and_canonical() -> None:
         "2001:db8::10",
         53,
     )
-    assert plan.format_version == 2
+    assert plan.format_version == 3
 
 
 @pytest.mark.parametrize(

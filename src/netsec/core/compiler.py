@@ -6,12 +6,14 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from netsec.core.domains import dns_name
-from netsec.core.functions import declare_function
+from netsec.core.functions import declare_class, declare_function, validate_type
+from netsec.core.lexer import TYPES
 from netsec.core.model import Expression, Program, Source, Span, Statement, fail
-from netsec.core.parser import parse
+from netsec.core.modules import expand
+from netsec.core.resources import ServerResource
 from netsec.core.values import Scope, Value, convert, evaluate, require
 
 MAX_INSTRUCTIONS = 10_000
@@ -26,12 +28,15 @@ class Instruction(BaseModel):
     """A validated instruction consumed by NetSec's own executor."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
-    operation: Literal["check_port", "check_service", "check_dns", "allow", "deny", "report"]
+    operation: Literal[
+        "check_port", "check_service", "check_dns", "allow", "deny", "report", "server"
+    ]
     host: str = ""
     port: int = Field(default=0, ge=0, le=65535)
     protocol: Literal["tcp", "udp"] = "tcp"
     message: str = ""
     expected: str = ""
+    resource: ServerResource | None = None
     source: Span
 
 
@@ -39,7 +44,7 @@ class Plan(BaseModel):
     """Versioned compilation output with a bounded instruction count."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
-    format_version: Literal[2] = 2
+    format_version: Literal[3] = 3
     instructions: tuple[Instruction, ...] = Field(max_length=MAX_INSTRUCTIONS)
 
 
@@ -86,7 +91,14 @@ class Compiler:
             instructions.extend(self._top_level(statement))
             _check_size(instructions, statement.span)
         _check_conflicts(instructions)
-        if sum(len(item.message) for item in instructions) > MAX_PLAN_TEXT:
+        _check_resources(instructions)
+        if (
+            sum(
+                len(item.message) + (len(item.resource.content) if item.resource else 0)
+                for item in instructions
+            )
+            > MAX_PLAN_TEXT
+        ):
             fail(
                 "E_LIMIT", "Expanded plan text exceeds 1000000 characters", instructions[-1].source
             )
@@ -98,6 +110,8 @@ class Compiler:
                 _binding(statement, self.scope)
             case "function":
                 declare_function(statement, self.scope)
+            case "class":
+                declare_class(statement, self.scope)
             case "group":
                 self._group(statement)
             case "play":
@@ -154,6 +168,7 @@ def _unique_host(host: Host, hosts: list[Host]) -> None:
 
 
 def _binding(statement: Statement, scope: Scope) -> None:
+    validate_type(statement.type_name, scope, statement.span)
     value = value_of(statement, scope)
     require(value, statement.type_name, expression_of(statement).span)
     scope.define(statement.name, value, statement.span)
@@ -161,8 +176,8 @@ def _binding(statement: Statement, scope: Scope) -> None:
 
 def _report(statement: Statement, scope: Scope, host: str) -> Instruction:
     value = value_of(statement, scope)
-    if value.type_name in {"group", "function"}:
-        fail("E_TYPE", "Cannot report an inventory group or function as a scalar", statement.span)
+    if value.type_name not in TYPES:
+        fail("E_TYPE", "Cannot report a non-scalar value; select a field", statement.span)
     message = str(value.data).lower() if value.type_name == "bool" else str(value.data)
     return Instruction(operation="report", host=host, message=message, source=statement.span)
 
@@ -194,8 +209,9 @@ def _statement(statement: Statement, scope: Scope, host: str) -> list[Instructio
             return body * count
         case "port" | "service" | "firewall":
             return [_network(statement, scope, host)]
-        case "dns":
-            return [_dns(statement, scope, host)]
+        case "dns" | "server":
+            handler = _dns if statement.kind == "dns" else _server
+            return [handler(statement, scope, host)]
         case _:
             fail("E_CONTEXT", f"{statement.kind} is not allowed in a play", statement.span)
 
@@ -248,10 +264,15 @@ def _dns(statement: Statement, scope: Scope, host: str) -> Instruction:
     if statement.expected is None:
         fail("E_DNS_EXPECT", "DNS check requires an expected IP address", statement.span)
     expected = convert("ip", evaluate(statement.expected, scope), statement.expected.span)
+    port = (
+        int(convert("port", evaluate(statement.protocol, scope), statement.span).data)
+        if statement.protocol
+        else 53
+    )
     return Instruction(
         operation="check_dns",
         host=host,
-        port=53,
+        port=port,
         protocol="udp",
         message=name,
         expected=str(expected.data),
@@ -262,6 +283,71 @@ def _dns(statement: Statement, scope: Scope, host: str) -> Instruction:
 def _check_size(instructions: list[Instruction], span: Span) -> None:
     if len(instructions) > MAX_INSTRUCTIONS:
         fail("E_LIMIT", "Expanded program exceeds 10000 instructions", span)
+
+
+def _server(statement: Statement, scope: Scope, host: str) -> Instruction:
+    port = int(convert("port", value_of(statement, scope), statement.span).data)
+    if statement.protocol is None:
+        fail("E_SERVER", "Missing server content or DNS record", statement.span)
+    content = str(require(evaluate(statement.protocol, scope), "string", statement.span).data)
+    fields: dict[str, object] = {
+        "name": statement.name,
+        "kind": statement.type_name,
+        "host": host,
+        "port": port,
+    }
+    if statement.type_name == "http":
+        fields["content"] = content
+    else:
+        if statement.expected is None:
+            fail("E_SERVER", "DNS server requires an answer address", statement.span)
+        fields["address"] = str(
+            convert("ip", evaluate(statement.expected, scope), statement.span).data
+        )
+        try:
+            fields["record"] = dns_name(content)
+        except ValueError:
+            fail("E_SERVER", "Invalid DNS record name", statement.span)
+    try:
+        resource = ServerResource.model_validate(fields)
+    except ValidationError:
+        fail("E_SERVER", "Invalid server name, address or configuration", statement.span)
+    return Instruction(
+        operation="server",
+        host=host,
+        port=port,
+        resource=resource,
+        protocol="tcp" if resource.kind == "http" else "udp",
+        source=statement.span,
+    )
+
+
+def _check_resources(instructions: list[Instruction]) -> None:
+    names: dict[tuple[str, str], Instruction] = {}
+    ports: dict[tuple[str, int], Instruction] = {}
+    for item in instructions:
+        if item.resource is None:
+            continue
+        for key, entries in (((item.host, item.resource.name), names),):
+            previous = entries.get(key)
+            if previous and previous.resource != item.resource:
+                fail(
+                    "E_SERVER_CONFLICT",
+                    "Conflicting server configurations",
+                    item.source,
+                    previous.source,
+                )
+            entries[key] = item
+        endpoint = (item.host, item.port)
+        previous = ports.get(endpoint)
+        if previous and previous.resource != item.resource:
+            fail(
+                "E_SERVER_CONFLICT",
+                "Servers compete for one endpoint",
+                item.source,
+                previous.source,
+            )
+        ports[endpoint] = item
 
 
 def _check_conflicts(instructions: list[Instruction]) -> None:
@@ -281,12 +367,15 @@ def _check_conflicts(instructions: list[Instruction]) -> None:
         rules[key] = instruction
 
 
-def compile_source(text: str, filename: str = "<input>") -> Plan:
+def compile_source(
+    text: str, filename: str = "<input>", *, modules: dict[str, str] | None = None
+) -> Plan:
     """Compile source entirely before allowing any network activity.
 
     Args:
         text: NetSec program in Unicode.
         filename: Filename shown in diagnostics.
+        modules: Optional self-contained relative-path module bundle.
 
     Returns:
         A validated executable instruction plan.
@@ -295,4 +384,4 @@ def compile_source(text: str, filename: str = "<input>") -> Plan:
         NetSecError: If lexical, syntactic, type or domain validation fails.
         ValidationError: If input exceeds the source size limit.
     """
-    return Compiler().compile(parse(Source(text=text, filename=filename)))
+    return Compiler().compile(expand(Source(text=text, filename=filename, modules=modules or {})))

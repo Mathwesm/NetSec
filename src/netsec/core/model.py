@@ -8,7 +8,9 @@ from typing import Literal, NoReturn
 from pydantic import BaseModel, ConfigDict, Field
 
 type Scalar = str | int | bool
-type ExpressionKind = Literal["literal", "name", "unary", "binary", "convert", "call"]
+type ExpressionKind = Literal[
+    "literal", "name", "unary", "binary", "convert", "call", "member", "method"
+]
 type StatementKind = Literal[
     "binding",
     "group",
@@ -22,6 +24,9 @@ type StatementKind = Literal[
     "if",
     "repeat",
     "function",
+    "class",
+    "import",
+    "server",
 ]
 MAX_EXPRESSION_HEIGHT = 100
 
@@ -31,7 +36,8 @@ class Source(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
     text: str = Field(max_length=1_000_000)
-    filename: str = Field(default="<input>", min_length=1)
+    filename: str = Field(default="<input>", min_length=1, max_length=4096)
+    modules: dict[str, str] = Field(default_factory=dict, max_length=64)
 
 
 @dataclass(frozen=True, slots=True)

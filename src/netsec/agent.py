@@ -39,7 +39,9 @@ def handle(request: AgentRequest, adapter: NativeAdapter | None = None) -> Probe
 
     Management-port overrides are intentionally unavailable through SSH.
     """
-    plan = compile_source(request.source.text, request.source.filename)
+    plan = compile_source(
+        request.source.text, request.source.filename, modules=request.source.modules
+    )
     selected = Plan(
         instructions=tuple(item for item in plan.instructions if item.host == request.host)
     )
@@ -52,8 +54,12 @@ def handle(request: AgentRequest, adapter: NativeAdapter | None = None) -> Probe
     if request.index >= len(plan.instructions):
         raise RuntimeFailureError("Agent instruction index is outside the compiled plan")
     instruction = plan.instructions[request.index]
-    if instruction.host != request.host or instruction.operation not in {"allow", "deny"}:
-        raise RuntimeFailureError("Agent instruction is not a firewall rule for this target")
+    if instruction.host != request.host or instruction.operation not in {"allow", "deny", "server"}:
+        raise RuntimeFailureError("Agent instruction is not a managed resource for this target")
+    if instruction.operation == "server":
+        if request.operation == "remove":
+            return native.remove_servers(Plan(instructions=(instruction,)))[0]
+        return native.server(instruction)
     if request.operation == "remove":
         return native.remove(Plan(instructions=(instruction,)))[0]
     return native.firewall(instruction)

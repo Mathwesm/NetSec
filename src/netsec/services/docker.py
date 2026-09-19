@@ -61,6 +61,10 @@ class DockerAdapter:
 
     def preflight(self, plan: Plan) -> None:
         """Check ownership labels and actual container IPs before any mutation."""
+        if any(item.operation == "server" for item in plan.instructions):
+            raise RuntimeFailureError(
+                "Server deployment requires systemd through local or SSH mode"
+            )
         self._inspect(self.inventory.probe_container)
         hosts = {item.host for item in plan.instructions if item.host}
         for host in sorted(hosts):
@@ -163,6 +167,10 @@ class DockerAdapter:
             ]
             if rules:
                 self._call(["exec", "-i", container, "nft", "-f", "-"], _deletions(rules))
+
+    def server(self, instruction: Instruction) -> ProbeResult:
+        """Refuse service writes in the original firewall-only laboratory adapter."""
+        raise RuntimeFailureError(f"Unsupported Docker server operation: {instruction.operation}")
 
     def _call(
         self, arguments: list[str], text: str | None = None

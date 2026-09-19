@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from ipaddress import ip_address
+from itertools import groupby
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -12,6 +15,8 @@ from netsec.core.compiler import Instruction, Plan
 from netsec.core.values import MAX_PORT
 from netsec.services.observations import observe
 from netsec.services.probes import ProbeResult
+
+MAX_WORKERS = 32
 
 
 class RuntimeFailureError(Exception):
@@ -31,6 +36,10 @@ class Adapter(Protocol):
 
     def firewall(self, instruction: Instruction) -> ProbeResult:
         """Converge a firewall rule toward its declared state."""
+        ...
+
+    def server(self, instruction: Instruction) -> ProbeResult:
+        """Converge an explicitly supported owned server resource."""
         ...
 
 
@@ -73,6 +82,7 @@ class SimulationAdapter:
     def __init__(self, scenario: Scenario) -> None:
         self.scenario = scenario
         self.rules: dict[tuple[str, int, str], str] = {}
+        self.servers: dict[tuple[str, str], Instruction] = {}
 
     def preflight(self, plan: Plan) -> None:
         """Require every target to exist in the supplied simulation."""
@@ -110,6 +120,19 @@ class SimulationAdapter:
         self.rules[key] = instruction.operation
         return ProbeResult(True, "unchanged" if unchanged else "applied", "Simulated policy")
 
+    def server(self, instruction: Instruction) -> ProbeResult:
+        """Record desired resource state without inventing network availability."""
+        if instruction.resource is None:
+            raise RuntimeFailureError("Missing server resource")
+        key = (instruction.host, instruction.resource.name)
+        previous = self.servers.get(key)
+        self.servers[key] = instruction
+        return ProbeResult(
+            True,
+            "unchanged" if previous == instruction else "applied",
+            "Simulated deployment; checks still use the explicit scenario",
+        )
+
 
 class NetworkAdapter:
     """Make real probes from this computer without firewall privileges."""
@@ -119,7 +142,7 @@ class NetworkAdapter:
 
     def preflight(self, plan: Plan) -> None:
         """Reject unsupported writes before even a read-only probe starts."""
-        if any(item.operation in {"allow", "deny"} for item in plan.instructions):
+        if any(item.operation in {"allow", "deny", "server"} for item in plan.instructions):
             raise RuntimeFailureError(
                 "Network mode cannot apply firewall rules; use the Docker lab adapter"
             )
@@ -131,6 +154,10 @@ class NetworkAdapter:
     def firewall(self, instruction: Instruction) -> ProbeResult:
         """Refuse an unsupported operation regardless of caller behavior."""
         raise RuntimeFailureError(f"Unsupported firewall operation: {instruction.operation}")
+
+    def server(self, instruction: Instruction) -> ProbeResult:
+        """Reject writes in the read-only adapter."""
+        raise RuntimeFailureError(f"Unsupported server operation: {instruction.operation}")
 
 
 class Record(BaseModel):
@@ -163,6 +190,7 @@ def execute(
     *,
     fail_fast: bool = False,
     on_record: Callable[[Record], None] | None = None,
+    workers: int = 1,
 ) -> Execution:
     """Run a fully validated plan, preserving individual adapter failures.
 
@@ -172,6 +200,7 @@ def execute(
         mode: Label included in exported evidence.
         fail_fast: Stop after the first failed operation while retaining prior results.
         on_record: Optional durable journal callback after each completed instruction.
+        workers: Bounded parallel read-only checks; writes remain ordered barriers.
 
     Returns:
         Ordered results for every instruction.
@@ -179,26 +208,42 @@ def execute(
     Raises:
         RuntimeFailureError: If preflight fails, before any instruction is executed.
     """
+    if not 1 <= workers <= MAX_WORKERS:
+        raise RuntimeFailureError("Workers must be between 1 and 32")
     adapter.preflight(plan)
     records: list[Record] = []
-    for instruction in plan.instructions:
-        try:
-            result = _execute_instruction(instruction, adapter)
-        except RuntimeFailureError as error:
-            result = ProbeResult(False, "adapter_error", str(error))
-        records.append(
-            Record(
-                instruction=instruction,
-                success=result.success,
-                status=result.status,
-                detail=result.detail,
-            )
-        )
+    for record in _records(plan, adapter, 1 if fail_fast else workers):
+        records.append(record)
         if on_record is not None:
             on_record(records[-1])
-        if fail_fast and not result.success:
+        if fail_fast and not record.success:
             break
     return Execution(mode=mode, records=tuple(records))
+
+
+def _records(plan: Plan, adapter: Adapter, workers: int) -> Iterator[Record]:
+    record = partial(_record, adapter=adapter)
+    if workers == 1:
+        yield from map(record, plan.instructions)
+        return
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="netsec-check") as pool:
+        for read_only, batch in groupby(
+            plan.instructions, key=lambda item: item.operation.startswith("check_")
+        ):
+            if read_only:
+                yield from pool.map(record, batch)
+            else:
+                yield from map(record, batch)
+
+
+def _record(instruction: Instruction, adapter: Adapter) -> Record:
+    try:
+        result = _execute_instruction(instruction, adapter)
+    except RuntimeFailureError as error:
+        result = ProbeResult(False, "adapter_error", str(error))
+    return Record(
+        instruction=instruction, success=result.success, status=result.status, detail=result.detail
+    )
 
 
 def _execute_instruction(instruction: Instruction, adapter: Adapter) -> ProbeResult:
@@ -206,4 +251,6 @@ def _execute_instruction(instruction: Instruction, adapter: Adapter) -> ProbeRes
         return ProbeResult(True, "reported", instruction.message)
     if instruction.operation in {"allow", "deny"}:
         return adapter.firewall(instruction)
+    if instruction.operation == "server":
+        return adapter.server(instruction)
     return adapter.check(instruction)
