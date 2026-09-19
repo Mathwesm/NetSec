@@ -2,7 +2,7 @@
 
 ```mermaid
 flowchart LR
-    A[Arquivo .netsec] --> B[Lexer: tokens e posições]
+    A[Arquivo .netsec e imports locais] --> B[Lexer: tokens e posições]
     B --> C[Parser: árvore sintática]
     C --> D[Semântica: nomes, tipos e políticas]
     D --> E[Plano de instruções]
@@ -10,6 +10,9 @@ flowchart LR
     F --> G[Cenário simulado]
     F --> H[Sondas TCP / SSH / HTTP / HTTPS]
     F --> I[Docker + nftables]
+    F --> K[Linux / Windows nativos]
+    F --> L[Agentes Linux por SSH]
+    M[systemd / Task Scheduler] --> F
     D --> J[Diagnósticos no VS Code]
 ```
 
@@ -22,9 +25,14 @@ flowchart LR
 | `core/model.py` | Nós da árvore e diagnósticos | Como um erro conserva arquivo, linha e coluna? |
 | `core/values.py` | Tabela de símbolos e operações tipadas | Por que bool não pode ser uma porta? |
 | `core/compiler.py` | Validação e geração do plano | Como detectar o mesmo IP em dois grupos? |
+| `core/modules.py` | Imports relativos e pacotes de fontes | Como impedir saída da pasta e ciclos? |
+| `core/functions.py` | Funções e classes nominais | Como verificar método nunca chamado? |
 | `runtime.py` | Ordem de execução e resultados | O que acontece se um host não responde? |
 | `services/probes.py` | Sondas limitadas por tempo | Por que uma porta aberta não prova SSH? |
 | `services/docker.py` | Regras idempotentes no laboratório | Como aplicar duas vezes sem duplicar regras? |
+| `platforms/servers.py` | HTTP/DNS isolados com systemd | Como recuperar serviço parado sem substituir configuração global? |
+| `platforms/scheduler.py` | Agendamento persistente | Por que código gravável por usuário comum não pode rodar como root/SYSTEM? |
+| `automation.py` | Reconciliação, resultados e alertas | Como retomar sem confiar num resultado antigo? |
 | `editor.py` | Análise de texto ainda não salvo | Como o editor evita executar rede ao digitar? |
 | `evaluation.py` | Corpus e medição | O que 25 acertos permitem ou não concluir? |
 
@@ -53,7 +61,8 @@ de caminhos e detecção de conflitos condicionais.
 ## Editor
 
 A extensão usa as APIs de completion, hover, definição e diagnósticos do VS Code.
-Ela envia um pedido JSON ao comando `netsec editor`, que analisa o buffer sem executá-lo.
+Ela envia um pedido JSON com buffer e módulos locais ao comando `netsec editor`, que
+analisa o programa sem executá-lo. Campos e métodos de classes possuem sugestões próprias.
 Não implementa LSP nesta versão: a integração direta reduz dependências. Colunas Unicode
 do compilador são convertidas para os índices UTF-16 usados pelo editor.
 

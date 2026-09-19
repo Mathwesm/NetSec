@@ -1,6 +1,6 @@
 [project]
 name = "netsec-lang"
-version = "0.2.0"
+version = "0.3.0"
 description = "A typed language for network checks and verifiable firewall policies"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

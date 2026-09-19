@@ -2,7 +2,7 @@
   "name": "netsec-language",
   "displayName": "NetSec",
   "description": "Syntax highlighting, typed completion and compiler diagnostics for NetSec.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "Mathwesm",
   "engines": {
     "vscode": "^1.90.0"

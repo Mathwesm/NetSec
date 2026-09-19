@@ -38,7 +38,8 @@ O instalador gerado pelo CI fica no artefato **netsec-windows**. Escolha a pasta
 instalar para o usuário atual ou para todos. O executável inclui Python e dependências;
 o usuário final não precisa instalar Poetry/Python. O instalador não modifica o PATH nem
 habilita execução automática. Instalação para todos pode exigir UAC, mas não eleva cada
-execução do programa. O pacote ainda não possui assinatura comercial de código.
+execução do programa. O pacote é distribuído sem assinatura enquanto não houver certificado
+confiável; a opção de build assinado está documentada em [serviços e automação](servicos-e-automacao.md).
 
 Build reproduzível com Inno Setup 6 disponível:
 
@@ -97,7 +98,8 @@ Crie um inventário local, fora do Git público, por exemplo `data/ssh.json`:
 }
 ```
 
-Caminhos são relativos ao diretório de execução. Confirme fingerprints por canal
+Caminhos interativos podem ser relativos ao diretório de execução; jobs persistentes
+exigem caminhos absolutos para chave e `known_hosts`. Confirme fingerprints por canal
 independente antes de cadastrar `known_hosts`; não aceite automaticamente a primeira chave
 vista na rede. O programa usa StrictHostKeyChecking, BatchMode, sem senha interativa,
 sem encaminhamento e ignora configurações locais que introduzam proxies/comandos.
@@ -152,9 +154,15 @@ Evidências vão para uma pasta nova em `data/processed/professional-<UTC>-<id>/
 
 Windows nativo é testado no runner descartável do CI com
 `poetry run python lab/professional/validate_windows.py --apply`: criação, reaplicação,
-mudança de ação e remoção de regra restrita a loopback/porta alta. **Não comprova bloqueio
-de tráfego Windows**, pois loopback não representa tráfego de outra máquina. A sessão
-local de desenvolvimento não está elevada, e seu firewall não foi alterado.
+mudança de ação e remoção de regra restrita a loopback/porta alta. Esse teste isoladamente
+não comprova filtragem. O workflow `Professional deployment` acrescenta
+`validate_windows_traffic.py`: um cliente em contêiner Windows com IP distinto acessa
+o servidor antes da regra, perde acesso após `deny` e recupera após `allow`. O servidor
+confirma o IP real de origem. O firewall do computador de desenvolvimento não é alterado.
+
+O mesmo workflow testa HTTP/DNS e jobs systemd em Ubuntu. O workflow `CI` testa o pacote
+Windows instalado para todos os usuários e sua execução real como SYSTEM. Para reproduzir
+esses testes privilegiados, use uma VM descartável; não um servidor de produção.
 
 ## 7. Falhas, diários e limites
 
@@ -168,8 +176,10 @@ nunca sobrescreve um arquivo existente. Códigos: 0 sucesso, 1 observação/aç�
 2 entrada inválida ou preflight impedido. O diário pode conter IPs e reports: trate-o como
 dado operacional local, não publique indiscriminadamente.
 
-Não há classes/herança, módulos de usuário, agendamento autônomo, roteamento/NAT global,
-gestão de equipamentos proprietários nem transação distribuída. A NetSec continua uma
+Classes tipadas, módulos, HTTP/DNS gerenciados e agendamento estão no
+[guia de serviços e automação](servicos-e-automacao.md), com exemplos executáveis.
+Não há herança, roteamento/NAT global, gestão de equipamentos proprietários nem
+transação distribuída. A NetSec continua uma
 DSL de redes, não um substituto geral para Python ou para uma plataforma de configuração
 com décadas de maturidade. Funções e integrações são verificáveis; recursos futuros não
 são anunciados como prontos.

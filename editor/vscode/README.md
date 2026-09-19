@@ -2,6 +2,8 @@
 
 Suporte a arquivos `.netsec`: cores, snippets, autocomplete de nomes e tipos,
 hover, navegação para declaração e erros do próprio compilador com linha e coluna.
+Inclui nomes importados e campos/métodos de classes em acessos diretos como `node.`.
+Imports são limitados à pasta do arquivo principal; não carregam pacotes ou URLs.
 
 Abra a **raiz do projeto NetSec**, execute `poetry install` e instale o VSIX.
 O comando padrão é `poetry run netsec editor`. Para um compilador já instalado,
@@ -19,4 +21,4 @@ npm test
 npm run package
 ```
 
-O pacote gerado pode ser instalado com `code --install-extension netsec-language-0.1.0.vsix`.
+O pacote gerado pode ser instalado com `code --install-extension netsec-language-0.3.0.vsix`.

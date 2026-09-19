@@ -79,8 +79,10 @@ poetry run netsec vpn down data/tunnel.json --apply
   Não há rollback de uma configuração anterior: falha numa interface existente exige
   inspeção/reconciliação. Se uma criação nova falhar durante a configuração, a interface
   recém-criada é removida.
-- A configuração não sobrevive automaticamente a reboot. Integração com systemd/secrets
-  manager e operação contínua precisam de política de implantação própria.
+- `vpn up` sozinho altera apenas o estado atual. Para reconciliar no boot e periodicamente,
+  instale um job Linux `kind: "vpn"`, com manifesto e arquivo de ambiente root-only,
+  conforme [serviços e automação](servicos-e-automacao.md). A instalação não aceita depender
+  apenas de uma chave exportada no terminal interativo. Não há integração com cofre externo.
 
 ## Reprodução da evidência real
 

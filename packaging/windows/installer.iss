@@ -8,7 +8,7 @@
 [Setup]
 AppId={{F4211EE6-C288-40C5-9ABD-2B636F647E30}
 AppName=NetSec
-AppVersion=0.2.0
+AppVersion=0.3.0
 AppPublisher=Matheus
 DefaultDirName={autopf}\NetSec
 DefaultGroupName=NetSec
@@ -18,7 +18,7 @@ DisableDirPage=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputRoot}
-OutputBaseFilename=NetSec-0.2.0-Windows-Setup
+OutputBaseFilename=NetSec-0.3.0-Windows-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

@@ -1,11 +1,13 @@
 # NetSec
 
-Esta é a **linha profissional 0.2**, em `feat/professional-platform`.
+Esta é a **linha profissional 0.3**, em `feat/professional-platform`.
 A apresentação de 20 slides, os quatro apresentadores e o roteiro da disciplina ficam
 preservados em `feat/academic-presentation`.
 
 Comece pelo [guia profissional passo a passo](docs/profissional.md): instalação, interface
 Windows/UAC, firewall nativo, SSH, DNS, funções e recuperação após falhas.
+O [guia de serviços e automação](docs/servicos-e-automacao.md) cobre classes, módulos,
+HTTP/DNS Linux, jobs persistentes Windows/Linux, paralelismo e assinatura opcional.
 
 Também inclui [VPN WireGuard Linux](docs/vpn.md), com manifesto tipado, prévia offline,
 chave privada por variável de ambiente e verificação de handshake. O módulo é um comando
@@ -57,6 +59,7 @@ opcionais; copiar para `.env` não é obrigatório. Não há credencial necessá
 poetry run netsec run examples/01_audit.netsec --scenario examples/scenario.json
 poetry run netsec run examples/02_policy.netsec --scenario examples/scenario.json
 poetry run netsec run examples/03_scopes.netsec --scenario examples/scenario.json
+poetry run netsec run examples/07_classes_modules.netsec --scenario examples/scenario.json
 ```
 
 Os IPs `192.0.2.0/24` dos exemplos são dados de documentação, não máquinas acessadas pela
@@ -111,12 +114,13 @@ esperada de conectividade depois do bloqueio.
 
 ```sh
 npm --prefix editor/vscode run package
-code --install-extension editor/vscode/netsec-language-0.2.0.vsix
+code --install-extension editor/vscode/netsec-language-0.3.0.vsix
 code .
 ```
 
 Abra a raiz do repositório e um arquivo `.netsec`. A extensão oferece cores, snippets,
-nomes visíveis com tipo, hover, ir à declaração e erros do compilador no painel Problems.
+nomes visíveis com tipo, campos/métodos após `.`, imports, hover, ir à declaração e erros
+do compilador no painel Problems.
 Ela analisa o conteúdo ainda não salvo; não executa rede ao digitar. Usa por padrão
 `poetry run netsec editor`, configurável em `netsec.command` e `netsec.arguments`.
 
@@ -140,6 +144,7 @@ Markdown resume a matriz de resultados. Cada execução usa um diretório novo, 
 ## Organização e material da disciplina
 
 - [Especificação, EBNF, tokens e decisões](docs/especificacao.md).
+- [Validação profissional 0.3, desempenho e limites](docs/validacao-0.3.md).
 - [Arquitetura e guia de estudo para a arguição](docs/arquitetura.md).
 - [Datas e critérios das entregas](docs/entregas.md).
 - [Laboratório e reprodução da demonstração](docs/laboratorio.md).
@@ -151,20 +156,23 @@ Markdown resume a matriz de resultados. Cada execução usa um diretório novo, 
 ## Limitações atuais
 
 Condições são estáticas; não dependem do resultado dos checks. Declarações são imutáveis.
-Há funções puras tipadas com `fn`, declaradas antes do uso. Não há classes, funções com
-efeitos de rede no corpo, recursão, módulos de usuário ou tratamento de exceções na NetSec.
+Há funções e métodos puros tipados, classes imutáveis e imports relativos. Não há herança,
+funções com efeitos de rede no corpo, recursão ou tratamento de exceções na NetSec.
 O compilador informa o primeiro erro, sem recuperação para listar todos de uma vez.
 
 Checks verificam TCP, identificação SSH e HTTP/HTTPS; não constituem um scanner completo
 de vulnerabilidades. HTTPS exige certificado válido para o IP. UDP genérico é recusado;
 regras UDP são permitidas. DNS A/AAAA é verificado contra um resolvedor explícito. Firewall
-Windows nativo e Linux nativo/SSH estão implementados; as evidências distinguem teste do
-CRUD de regras Windows de bloqueio real de tráfego Linux. Não há transação distribuída:
+Windows nativo e Linux nativo/SSH estão implementados. Há testes separados de CRUD e de
+bloqueio real de tráfego, inclusive com cliente Windows de IP distinto. Não há transação distribuída:
 o diário registra instruções concluídas, e reaplicar converge as regras e repete os checks.
 Não há alteração de roteador, DNS do sistema, NAT ou política padrão de firewall.
 
-O uso padrão é manual, para desenvolvimento e demonstração. Não há job autônomo de
-administração de redes nem alerta Telegram configurado. Logs operacionais ficam em
-`logs/netsec.log`, em JSON, com rotação; não incluem código-fonte nem conteúdo dos reports.
+O uso padrão é manual. `automation install --apply` habilita explicitamente jobs persistentes
+via systemd ou Task Scheduler. Alertas Telegram são opcionais e exigem credenciais no
+ambiente do serviço. HTTP/DNS e VPN são provisionados no Linux; no Windows, há firewall,
+checks e jobs de políticas. Não há certificado de assinatura incluído no instalador.
+Logs operacionais ficam em `logs/netsec.log`, em JSON, com rotação; não incluem código-fonte
+nem conteúdo dos reports. Diários de execução contêm dados operacionais e exigem proteção.
 O artigo final, as referências da disciplina e a revisão entre integrantes são entregas
 acadêmicas separadas; os arquivos do projeto fornecem implementação e evidências para elas.

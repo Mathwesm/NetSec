@@ -130,7 +130,7 @@ jobs:
       - name: Smoke test per-user installation in a path with spaces
         shell: powershell
         run: |
-          $installer = Get-ChildItem -LiteralPath dist -Recurse -Filter 'NetSec-0.2.0-Windows-Setup.exe' | Select-Object -First 1
+          $installer = Get-ChildItem -LiteralPath dist -Recurse -Filter 'NetSec-0.3.0-Windows-Setup.exe' | Select-Object -First 1
           if (-not $installer) { throw 'Installer output is missing' }
           $destination = Join-Path $env:RUNNER_TEMP 'NetSec installation smoke'
           $process = Start-Process -FilePath $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', ('/DIR="' + $destination + '"')) -Wait -PassThru -WindowStyle Hidden
@@ -154,7 +154,7 @@ jobs:
       - name: Install for all users and validate persistent SYSTEM job
         shell: powershell
         run: |
-          $installer = Get-ChildItem -LiteralPath dist -Recurse -Filter 'NetSec-0.2.0-Windows-Setup.exe' | Select-Object -First 1
+          $installer = Get-ChildItem -LiteralPath dist -Recurse -Filter 'NetSec-0.3.0-Windows-Setup.exe' | Select-Object -First 1
           $destination = Join-Path $env:ProgramFiles 'NetSec Scheduler Smoke'
           $process = Start-Process -FilePath $installer.FullName -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/ALLUSERS', ('/DIR="' + $destination + '"')) -Wait -PassThru -WindowStyle Hidden
           if ($process.ExitCode -ne 0) { throw 'All-users installation failed' }

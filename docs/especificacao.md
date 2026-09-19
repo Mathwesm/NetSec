@@ -1,4 +1,4 @@
-# Especificação da NetSec 0.2
+# Especificação da NetSec 0.3
 
 ## Propósito e público
 
@@ -48,6 +48,7 @@ o cenário de `examples/scenario.json`. O laboratório real possui inventário p
 | `network` | `network lan = network("192.0.2.0/24");` | CIDR canônico, sem bits de host |
 | `port` | `port admin = port(22);` | Intervalo inclusivo 1..65535 |
 | `protocol` | `protocol transport = tcp;` | `tcp` ou `udp` |
+| Classe declarada | `Server node = Server(ip("192.0.2.10"), port(22));` | Tipo nominal, campos imutáveis |
 
 Toda declaração informa o tipo. Verificar o tipo resultante de uma expressão não introduz
 inferência de tipos nas declarações. Nomes são imutáveis, sensíveis a maiúsculas, e visíveis
@@ -70,22 +71,29 @@ Fora desses contextos, a construção do tipo é explícita: `port admin = 22;` 
 Terminais estão entre aspas; chaves indicam repetição e colchetes, opcionalidade.
 
 ```ebnf
-program       = { declaration | function | group | play | report } ;
+program       = { declaration | function | class | import | group | play | report } ;
 declaration   = type, IDENTIFIER, "=", expression, ";" ;
+import        = "import", STRING, ";" ;
+class         = "class", IDENTIFIER, "{", { field | function }, "}" ;
+field         = type, IDENTIFIER, ";" ;
 function      = "fn", IDENTIFIER, "(", [ parameters ], ")", "->", type, "=", expression, ";" ;
 parameters    = type, IDENTIFIER, { ",", type, IDENTIFIER } ;
 arguments     = expression, { ",", expression } ;
-type          = "int" | "bool" | "string" | "ip" | "network" | "port" | "protocol" ;
+primitive     = "int" | "bool" | "string" | "ip" | "network" | "port" | "protocol" ;
+type          = primitive | IDENTIFIER ;
 group         = "group", IDENTIFIER, "{", host, { host }, "}" ;
 host          = "host", STRING, "address", expression, ";" ;
 play          = "play", STRING, "targets", IDENTIFIER, block ;
 block         = "{", { statement }, "}" ;
-statement     = declaration | check | firewall | report | conditional | repeat ;
+statement     = declaration | check | firewall | server | report | conditional | repeat ;
 check         = "check", ( "port", expression, "protocol", expression
-                        | "service", expression
-                        | "dns", expression, "expect", expression ), ";" ;
+                        | "service", expression, [ "port", expression ]
+                        | "dns", expression, [ "port", expression ], "expect", expression ), ";" ;
 firewall      = "firewall", ( "allow" | "deny" ), "port", expression,
                 "protocol", expression, ";" ;
+server        = "server", ( "http", STRING, "port", expression, "response", expression
+                         | "dns", STRING, "port", expression, "record", expression,
+                           "address", expression ), ";" ;
 report        = "report", expression, ";" ;
 conditional   = "if", expression, block, [ "else", block ] ;
 repeat        = "repeat", expression, block ;
@@ -96,10 +104,11 @@ equality      = comparison, { ( "==" | "!=" ), comparison } ;
 comparison    = addition, { ( "<" | "<=" | ">" | ">=" | "in" ), addition } ;
 addition      = product, { ( "+" | "-" ), product } ;
 product       = unary, { ( "*" | "/" | "%" ), unary } ;
-unary         = ( "not" | "+" | "-" ), unary | primary ;
+unary         = ( "not" | "+" | "-" ), unary | postfix ;
+postfix       = primary, { ".", IDENTIFIER, [ "(", [ arguments ], ")" ] } ;
 primary       = INTEGER | STRING | "true" | "false" | "tcp" | "udp"
               | IDENTIFIER, [ "(", [ arguments ], ")" ] | "(", expression, ")"
-              | type, "(", expression, ")" ;
+              | primitive, "(", expression, ")" ;
 ```
 
 O parser aceita uma árvore um pouco mais ampla: grupo vazio e construções no bloco errado
@@ -108,15 +117,38 @@ retornam uma expressão tipada. Corpos são verificados mesmo sem chamada; parâ
 são substituídos por valores artificiais para essa verificação. Chamadas usam escopo
 léxico, tipos exatos e aridade exata. Funções precisam ser declaradas antes do uso;
 recursão e definições aninhadas são recusadas. O limite é 32 chamadas aninhadas e 100.000
-avaliações por compilação. Não há atribuição posterior, imports ou exceções de usuário.
+avaliações por compilação. Não há atribuição posterior nem exceções de usuário.
 O texto acumulado das instruções expandidas é limitado a 1.000.000 de caracteres, para
 que repetições de reports não gerem relatórios desproporcionais ao arquivo de entrada.
 
 `check dns "app.test" expect ip("192.0.2.10");` consulta o IP do host atual como servidor
 DNS na porta 53 e compara o conjunto de respostas A/AAAA com o endereço esperado.
+`port <expressão>` é opcional em checks DNS e de serviço. Sem ele, os padrões são
+DNS/53, SSH/22, HTTP/80 e HTTPS/443. A porta explícita também passa pela validação 1..65535.
 Nomes ASCII/punycode são normalizados sem sufixos implícitos do sistema operacional.
-O plano da linha profissional usa `format_version: 2`; planos da versão 1 não são aceitos
-como versão 2. O agente SSH recebe fonte e recompila, não executa planos externos.
+O plano da linha profissional usa `format_version: 3`, incluindo recursos de servidor;
+versões anteriores não são aceitas como versão 3. O agente SSH recebe fonte e módulos
+e recompila, não executa planos externos. Atualize controlador e agentes juntos.
+
+### Classes, imports e recursos
+
+Classes têm campos explícitos, construtor posicional na ordem dos campos e métodos
+puros com `self` implícito. Tipo de parâmetro/retorno pode ser classe declarada. A igualdade
+compara valores de um mesmo tipo nominal; objetos de classes diferentes não são intercambiáveis.
+Composição é permitida até 100 níveis; herança, mutação e recursão não são suportadas.
+Métodos são declarados antes do uso e verificados mesmo quando não chamados.
+`report` aceita valores escalares: selecione um campo, não o objeto inteiro.
+
+`import "lib/server.netsec";` inclui um módulo relativo, uma única vez, com escopo global
+compartilhado. Import só é permitido no nível global. Ciclos, saída da pasta do arquivo
+principal e symlinks externos são recusados. Fontes usam UTF-8; o conjunto tem limite de
+64 módulos e 1 milhão de caracteres. Diagnósticos conservam o arquivo importado de origem.
+
+`server` só é válido em plays. HTTP declara conteúdo estático; DNS declara um registro
+exato A/AAAA. IP vem de `current_host`. Nomes usam letras minúsculas, números e hífen,
+começando com letra, até 32 caracteres. Recursos incompatíveis para o mesmo nome/IP
+ou recursos concorrentes na mesma porta/IP geram `E_SERVER_CONFLICT`. A geração de
+configuração nativa e as exigências de privilégio estão no [guia operacional](servicos-e-automacao.md).
 
 ## Tokens e precedência
 
@@ -127,9 +159,9 @@ como versão 2. O agente SSH recebe fonte e recompila, não executa planos exter
 | String | Aspas duplas, escapes JSON, sem quebra de linha literal |
 | Comentário | `//` até o fim da linha; descartado |
 | Espaço | Espaço, tabulação, CR e LF; descartados, preservando posições |
-| Delimitadores | `{` `}` `(` `)` `;` `=` `,` `->` |
+| Delimitadores | `{` `}` `(` `)` `;` `=` `,` `->` `.` |
 | Operadores | `+` `-` `*` `/` `%` `==` `!=` `<` `<=` `>` `>=` `and` `or` `not` `in` |
-| Palavras do domínio | `group host address play targets check port protocol service dns expect firewall allow deny report fn` |
+| Palavras do domínio | `group host address play targets check port protocol service dns expect firewall allow deny report fn class import server http response record` |
 | Controle e tipos | `if else repeat int bool string ip network true false tcp udp` |
 | Fim | Token EOF com a posição imediatamente após o texto |
 
@@ -177,13 +209,15 @@ do contexto. A tabela de símbolos e essas decisões pertencem ao projeto. `ipad
 
 ## Execução e limites
 
-O compilador gera instruções próprias `report`, `check_port`, `check_service`, `allow`
-e `deny`, com tipos já validados e origem preservada. Resolve grupos, seleciona ramos
+O compilador gera instruções próprias `report`, `check_port`, `check_service`, `check_dns`,
+`server`, `allow` e `deny`, com tipos já validados e origem preservada. Resolve grupos, seleciona ramos
 estáticos e expande repetições. O executor visita essas instruções em ordem, sem
 `eval`, `exec`, transpilar para Python ou reutilizar um executor de outra linguagem.
 
-Há três adaptadores: cenário determinístico, sondas reais na máquina local e laboratório
-Docker com nftables. Uma porta aberta comprova conectividade TCP; `check service "ssh"`
+Há cinco adaptadores: cenário determinístico, sondas reais, laboratório Docker, execução
+nativa local e agentes Linux por SSH. `--workers` paraleliza lotes consecutivos de checks,
+preservando ordem de resultados e barreiras para writes/reports; `--fail-fast` é serial.
+Uma porta aberta comprova conectividade TCP; `check service "ssh"`
 valida o banner, e HTTP/HTTPS validam a resposta HTTP. HTTPS também valida o certificado
 contra o IP. Isso não identifica vulnerabilidades nem garante a configuração segura do
 serviço. UDP genérico é recusado porque ausência de resposta não comprova porta aberta;
@@ -193,7 +227,8 @@ Cada tentativa de sonda tem prazo total, até duas tentativas com backoff e jitt
 Falhas de um alvo ficam no resultado e não apagam os demais. Código de saída: 0 para
 sucesso, 1 para observações com falha, 2 para erro de entrada/compilação/preflight.
 Reaplicação de firewall preserva o estado; regras opostas anteriores gerenciadas pela
-NetSec são substituídas atomicamente. Não há transação distribuída entre hosts: uma
+NetSec são reconciliadas; a troca Linux usa uma transação nftables, enquanto o backend
+Windows não garante troca atômica. Não há transação distribuída entre hosts: uma
 interrupção pode deixar parte do inventário alterada; reaplicar converge as regras e
 repete checks e reports. A retomada é por reaplicação, sem checkpoint do índice.
 
@@ -211,9 +246,9 @@ aceitos containers identificados por rótulo de propriedade e IP conferido por i
    rede e demonstrar o mesmo modelo com ações reais.
 
 Foram considerados e excluídos: funções recursivas, pelo custo de pilha e terminação;
-inferência de tipos, pelo veto inicial da atividade e menor transparência didática; e
-módulos/imports, pelo custo de resolução entre arquivos. Closures e exceções na linguagem
-também ficam fora do núcleo. A extensão do editor não acrescenta construções à linguagem.
+inferência de tipos, pelo veto inicial da atividade e menor transparência didática;
+herança, closures e exceções na linguagem. Módulos/imports e classes foram acrescentados
+na linha profissional. A extensão do editor não acrescenta construções à linguagem.
 
 ## Evidências exigidas pela disciplina
 
