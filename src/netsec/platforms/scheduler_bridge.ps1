@@ -42,9 +42,10 @@ function Assert-NoReparse([string]$Path) {
 function Assert-Protected([string]$Path) {
     Assert-NoReparse $Path
     $writeRights = [Security.AccessControl.FileSystemRights]::Write -bor [Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
-    foreach ($rule in (Get-Acl -LiteralPath $Path).Access) {
+    $acl = Get-Acl -LiteralPath $Path
+    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
         if ($rule.AccessControlType -ne 'Allow' -or ($rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly)) { continue }
-        $sid = $rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value
+        $sid = $rule.IdentityReference.Value
         $trusted = $sid -in @('S-1-5-18', 'S-1-5-32-544', 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
         if (-not $trusted -and ($rule.FileSystemRights -band $writeRights)) { throw 'Scheduled executable and configuration must not be writable by regular users' }
     }
