@@ -81,6 +81,33 @@ remoção não apaga conteúdos de outros programas nem limpa automaticamente o 
 Para implantação remota, use `run --mode ssh --inventory ... --apply`, com os mesmos
 pré-requisitos no destino. Todos os destinos passam por preflight antes das ações.
 
+### Instalação Linux protegida para jobs root
+
+Em uma VM Ubuntu 24.04 dedicada, o seguinte roteiro instala a aplicação em diretório
+administrativo. Revise o código/branch antes: tudo instalado como root entra na base de
+confiança da máquina. Não copie um ambiente virtual de usuário para um serviço privilegiado.
+
+```sh
+sudo -i
+apt-get update
+apt-get install -y python3.12 python3.12-venv pipx git nginx dnsmasq-base nftables iproute2 wireguard-tools
+pipx install poetry==2.4.1
+git clone --branch feat/professional-platform https://github.com/Mathwesm/NetSec.git /usr/local/lib/netsec
+cd /usr/local/lib/netsec
+export POETRY_VIRTUALENVS_IN_PROJECT=true
+/root/.local/bin/poetry env use /usr/bin/python3.12
+/root/.local/bin/poetry install --only main --no-interaction
+.venv/bin/netsec check examples/08_servers.netsec
+.venv/bin/netsec preview examples/08_servers.netsec
+```
+
+O executável para substituir os placeholders deste guia será
+`/usr/local/lib/netsec/.venv/bin/netsec`. O clone exige um destino ainda inexistente:
+nunca apague uma instalação existente para repetir o roteiro. Para desenvolvimento sem
+privilégios, use o clone normal do README, não esta instalação administrativa.
+Volte ao usuário comum com `exit` após configurar. Os pacotes do sistema são requisitos
+explícitos; Poetry continua gerenciando todas as dependências Python da aplicação.
+
 ## 3. Criar um job persistente
 
 O manifesto fixa uma cópia das fontes e módulos. Editar o `.netsec` original não muda
