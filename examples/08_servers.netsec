@@ -1,0 +1,12 @@
+// Apply only on an authorized systemd Linux machine with nginx and dnsmasq-base.
+group local {
+    host "local" address "127.0.0.1";
+}
+
+play "local_stack" targets local {
+    server http "local-site" port 18080 response "<h1>NetSec is running</h1>";
+    server dns "local-dns" port 15353 record "app.netsec.test" address current_host;
+    check service "http" port 18080;
+    check dns "app.netsec.test" port 15353 expect current_host;
+    report "Local HTTP and DNS verified.";
+}

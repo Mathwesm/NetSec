@@ -9,7 +9,8 @@ try {
     New-Item -ItemType Directory -Path $destination, $temporary | Out-Null
     $common = @('--onedir', '--distpath', $destination, '--workpath', $temporary, '--specpath', $temporary,
         '--paths', (Join-Path $project 'src'), '--collect-submodules', 'dns', '--collect-data', 'netsec', '--log-level', 'WARN',
-        '--add-data', ((Join-Path $project 'src/netsec/platforms/windows_bridge.ps1') + ':netsec/platforms'))
+        '--add-data', ((Join-Path $project 'src/netsec/platforms/windows_bridge.ps1') + ':netsec/platforms'),
+        '--add-data', ((Join-Path $project 'src/netsec/platforms/scheduler_bridge.ps1') + ':netsec/platforms'))
     & poetry run pyinstaller @common --name NetSec packaging/windows/cli_entry.py
     if ($LASTEXITCODE -ne 0) { throw 'CLI packaging failed' }
     & poetry run pyinstaller @common --name NetSec-Desktop --windowed packaging/windows/desktop_entry.py

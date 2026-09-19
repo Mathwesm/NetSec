@@ -1,5 +1,9 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+trap {
+    @{ success = $false; error_type = $_.Exception.GetType().Name; error_id = $_.FullyQualifiedErrorId; line = $_.InvocationInfo.ScriptLineNumber } | ConvertTo-Json -Compress
+    exit 0
+}
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $request = [Console]::In.ReadToEnd() | ConvertFrom-Json

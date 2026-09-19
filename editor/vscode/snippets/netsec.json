@@ -1,4 +1,24 @@
 {
+  "Typed server class": {
+    "prefix": "class",
+    "body": ["class ${1:Server} {", "    ip endpoint;", "    port management;", "    fn belongs(network subnet) -> bool = self.endpoint in subnet;", "}"],
+    "description": "Declare an immutable server class with a pure typed method"
+  },
+  "Source module import": {
+    "prefix": "import",
+    "body": ["import \"${1:lib/server.netsec}\";"],
+    "description": "Import declarations from a bounded local source module"
+  },
+  "Managed HTTP server": {
+    "prefix": "server-http",
+    "body": ["server http \"${1:site}\" port ${2:8080} response \"${3:NetSec is running}\";"],
+    "description": "Deploy an owned nginx service on systemd Linux"
+  },
+  "Managed DNS server": {
+    "prefix": "server-dns",
+    "body": ["server dns \"${1:resolver}\" port ${2:5353} record \"${3:app.test}\" address current_host;"],
+    "description": "Deploy an exact DNS record without upstream recursion"
+  },
   "Pure typed function": {
     "prefix": "fn",
     "body": ["fn ${1:service_port}(int ${2:base}, int ${3:offset}) -> port = port(${2:base} + ${3:offset});"],

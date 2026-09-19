@@ -1,0 +1,7 @@
+class Server {
+    ip endpoint;
+    port management;
+    fn belongs(network subnet) -> bool = self.endpoint in subnet;
+}
+
+fn management_port(Server node) -> port = node.management;

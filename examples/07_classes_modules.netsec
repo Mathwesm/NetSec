@@ -1,0 +1,14 @@
+import "lib/server.netsec";
+
+Server first = Server(ip("192.0.2.10"), port(22));
+Server second = Server(ip("192.0.2.11"), port(22));
+
+group fleet {
+    host "server01" address first.endpoint;
+    host "server02" address second.endpoint;
+}
+
+play "typed_fleet" targets fleet {
+    check port management_port(first) protocol tcp;
+    report first.belongs(network("192.0.2.0/24"));
+}

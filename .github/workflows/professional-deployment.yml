@@ -28,6 +28,7 @@ jobs:
           sudo mkdir /opt/netsec-validation
           sudo cp -a "$GITHUB_WORKSPACE/." /opt/netsec-validation/
           sudo chown -R root:root /opt/netsec-validation
+          sudo chmod -R go-w /opt/netsec-validation
           sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /opt/netsec-validation env use /usr/bin/python3.12
           sudo env PATH="$PATH" POETRY_VIRTUALENVS_IN_PROJECT=true poetry -C /opt/netsec-validation install --no-interaction
       - name: Validate actual services, recurring jobs and retained evidence

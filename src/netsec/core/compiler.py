@@ -229,10 +229,15 @@ def _network(statement: Statement, scope: Scope, host: str) -> Instruction:
         service = str(require(value_of(statement, scope), "string", statement.span).data)
         if service not in SERVICES:
             fail("E_SERVICE", "Supported services: ssh, http, https", statement.span)
+        endpoint = (
+            int(convert("port", evaluate(statement.protocol, scope), statement.span).data)
+            if statement.protocol
+            else SERVICES[service]
+        )
         return Instruction(
             operation="check_service",
             host=host,
-            port=SERVICES[service],
+            port=endpoint,
             message=service,
             source=statement.span,
         )

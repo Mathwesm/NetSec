@@ -133,6 +133,10 @@ def _windows(job: AutomationJob, operation: str) -> dict[str, object]:
     )
     if not isinstance(result, dict):
         raise RuntimeFailureError("Invalid Windows scheduler response")
+    if result.get("success") is False:
+        raise RuntimeFailureError(
+            f"Scheduler bridge failed at line {result.get('line')}: {result.get('error_id')}"
+        )
     return result
 
 

@@ -234,8 +234,9 @@ class Parser:
             return Statement("dns", token.span, expression=value, expected=expected, protocol=port)
         if self.accept("service"):
             value = self.expression()
+            port = self.expression() if self.accept("port") else None
             self.take(";")
-            return Statement("service", token.span, expression=value)
+            return Statement("service", token.span, expression=value, protocol=port)
         self.take("port")
         value = self.expression()
         self.take("protocol")
