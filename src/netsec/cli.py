@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from dataclasses import asdict
 from ipaddress import ip_address
 from pathlib import Path
+from textwrap import shorten
 from uuid import uuid4
 
 from loguru import logger
@@ -24,6 +26,7 @@ from netsec.evaluation import run_evaluation
 from netsec.lab_validation import validate_lab
 from netsec.runtime import (
     Adapter,
+    Execution,
     NetworkAdapter,
     RuntimeFailureError,
     Scenario,
@@ -64,6 +67,12 @@ def argument_parser() -> argparse.ArgumentParser:
 
 def _run_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mode", choices=("simulate", "network", "docker"), default="simulate")
+    parser.add_argument(
+        "--format",
+        choices=("json", "table"),
+        default="json",
+        help="Terminal display format; --output always writes JSON",
+    )
     parser.add_argument("--scenario", type=Path, help="Required JSON scenario for simulate mode")
     parser.add_argument("--inventory", type=Path, help="Required labelled-container inventory")
     parser.add_argument("--docker-executable", default="docker")
@@ -86,6 +95,34 @@ def _emit(value: object, output: Path | None = None) -> None:
         output.parent.mkdir(parents=True, exist_ok=True)
         with output.open("x", encoding="utf-8", newline="\n") as stream:
             stream.write(text)
+
+
+def _terminal_text(value: str, width: int) -> str:
+    visible = "".join(char if char.isprintable() else " " for char in value)
+    return shorten(visible, width=width, placeholder="...")
+
+
+def _emit_table(result: Execution, filename: str) -> None:
+    use_color = sys.stdout.isatty() and not os.environ.get("NO_COLOR")
+    host_width = max(15, max((len(row.instruction.host) for row in result.records), default=0))
+    headings = f"{'HOST':<{host_width}}  {'PORT':<9}  {'ACTION':<12}  {'STATUS':<13}  DETAIL"
+    sys.stdout.write(f"\nNetSec  |  {result.mode.upper()}  |  {_terminal_text(filename, 58)}\n\n")
+    sys.stdout.write(headings + "\n" + "-" * len(headings) + "\n")
+    for record in result.records:
+        item = record.instruction
+        port = f"{item.port}/{item.protocol}" if item.port else "-"
+        action = item.message if item.operation == "check_service" else item.operation
+        status = f"{record.status.upper():<13}"
+        if use_color:
+            color = {"timeout": "33", "unchanged": "36"}.get(
+                record.status, "32" if record.success else "31"
+            )
+            status = f"\x1b[{color}m{status}\x1b[0m"
+        detail = _terminal_text(record.detail, 56)
+        host = item.host or "-"
+        sys.stdout.write(f"{host:<{host_width}}  {port:<9}  {action:<12}  {status}  {detail}\n")
+    failed = sum(not record.success for record in result.records)
+    sys.stdout.write(f"\n{len(result.records)} instructions  |  {failed} unsuccessful\n\n")
 
 
 def _adapter(arguments: argparse.Namespace, settings: Settings) -> Adapter:
@@ -124,7 +161,10 @@ def _source_command(arguments: argparse.Namespace) -> int:
         len(result.records),
         sum(not record.success for record in result.records),
     )
-    _emit({"success": result.success, **result.model_dump(mode="json")}, arguments.output)
+    if arguments.format == "table" and arguments.output is None:
+        _emit_table(result, arguments.file.name)
+    else:
+        _emit({"success": result.success, **result.model_dump(mode="json")}, arguments.output)
     return 0 if result.success else 1
 
 
