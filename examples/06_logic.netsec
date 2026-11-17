@@ -1,0 +1,32 @@
+// Decide whether a grade and attendance satisfy the classroom requirements.
+int grade = 8;
+int minimum_grade = 7;
+int attendance = 86;
+bool excused = false;
+bool passing_grade = grade >= minimum_grade;
+bool eligible = passing_grade and (attendance >= 75 or excused);
+string next_step = "Review the next exercise.";
+
+report "Grade comparisons:";
+report grade > minimum_grade;
+report grade >= minimum_grade;
+report grade < 10;
+report grade <= 10;
+report grade == 8;
+report grade != 0;
+report not excused;
+
+ip example_host = ip("192.0.2.10");
+group classroom {
+    host "exercise" address example_host;
+}
+play "grading" targets classroom {
+    if eligible {
+        report "Passed.";
+    } else {
+        report "Needs review.";
+    }
+    repeat 2 {
+        report next_step;
+    }
+}

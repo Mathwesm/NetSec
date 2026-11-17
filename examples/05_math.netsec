@@ -1,0 +1,20 @@
+// Compare arithmetic precedence and divide a stock of pencils into boxes.
+int items = 17;
+int box_capacity = 5;
+int full_boxes = items / box_capacity;
+int leftovers = items % box_capacity;
+
+report "Multiplication before addition (14):";
+report 2 + 3 * 4;
+report "Parentheses first (20):";
+report (2 + 3) * 4;
+report "Pencils in full boxes (15):";
+report full_boxes * box_capacity;
+report "Full boxes (3):";
+report full_boxes;
+report "Pencils left over (2):";
+report leftovers;
+report "Pencils after removing one box (12):";
+report items - box_capacity;
+report "Unary signs and integer division (-4):";
+report -7 / +2;

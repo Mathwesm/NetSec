@@ -66,6 +66,45 @@ poetry run netsec run examples/03_scopes.netsec --scenario examples/scenario.jso
 Os IPs `192.0.2.x` são de documentação. O cenário informa as respostas e não acessa esses
 endereços pela rede. Ler o campo `mode` evita confundir simulação com execução real.
 
+### Contas e condições
+
+```sh
+poetry run netsec run examples/05_math.netsec --scenario examples/scenario.json --format table
+poetry run netsec run examples/06_logic.netsec --scenario examples/scenario.json --format table
+```
+
+Em `05_math.netsec`, use `report` para acompanhar o valor de cada expressão.
+`2 + 3 * 4` dá 14, e `(2 + 3) * 4` dá 20. Para 17 lápis em caixas de cinco,
+`17 / 5` dá três caixas completas e `17 % 5` dá dois lápis restantes. A divisão
+inteira arredonda para baixo, por isso `-7 / +2` dá −4.
+
+Em `06_logic.netsec`, compare a nota e a frequência com os mínimos, combine os
+resultados com `and`, `or` e `not` e veja o ramo escolhido por `if/else`.
+Troque `grade` de 8 para 6 para ver `Needs review.`. O bloco `repeat 2` registra
+duas mensagens. O grupo é usado para demonstrar a estrutura de `play`, com ações
+limitadas a `report`.
+
+### Onde ver cada parte da linguagem
+
+| Parte da gramática | Exemplo |
+|---|---|
+| `group`, `host`, `play`, `check port`, `check service` e `report` | `examples/01_audit.netsec` |
+| `port`, `protocol`, `firewall allow` e `firewall deny` | `examples/02_policy.netsec` |
+| `network`, `current_host`, `in`, escopo local e repetição por host | `examples/03_scopes.netsec` |
+| Erro semântico por políticas opostas | `examples/04_rejected.netsec` |
+| `int`, `+`, `-`, `*`, `/`, `%`, sinais unários e parênteses | `examples/05_math.netsec` |
+| `bool`, `string`, `ip`, comparações, `and`, `or`, `not`, `if/else` e `repeat` | `examples/06_logic.netsec` |
+
+A produção completa de cada construção está na [gramática EBNF](especificacao.md#gramática-ebnf).
+Os arquivos `exemplo.netsec` e `exemplo-real.netsec`, na raiz, são as versões curtas
+usadas no editor. Para o segundo, inicie o servidor local na porta 8000 e execute em modo rede:
+
+```sh
+poetry run python -m http.server 8000 --bind 127.0.0.1
+# Em outro terminal, na raiz do projeto:
+poetry run netsec run exemplo-real.netsec --mode network --format table
+```
+
 ## 4. Ver cada fase do compilador
 
 ```sh
@@ -96,7 +135,7 @@ npm --prefix editor/vscode ci --ignore-scripts
 poetry run pre-commit install
 poetry run poe gate
 npm --prefix editor/vscode run package
-code --install-extension editor/vscode/netsec-language-0.1.0.vsix
+code --install-extension editor/vscode/netsec-language-0.1.4.vsix
 code .
 ```
 

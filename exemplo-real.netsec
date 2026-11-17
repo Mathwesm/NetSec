@@ -1,0 +1,6 @@
+group servers {
+    host "local" address "127.0.0.1";
+}
+play "audit" targets servers {
+    check port 8000 protocol tcp;
+}

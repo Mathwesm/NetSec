@@ -1,0 +1,7 @@
+port admin = port(22);
+group servers {
+    host "site" address "192.0.2.10";
+}
+play "audit" targets servers {
+    check port admin protocol tcp;
+}
