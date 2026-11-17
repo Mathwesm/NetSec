@@ -19,4 +19,6 @@ npm test
 npm run package
 ```
 
-O pacote gerado pode ser instalado com `code --install-extension netsec-language-0.1.0.vsix`.
+O pacote gerado pode ser instalado com `code --install-extension netsec-language-0.1.4.vsix`.
+Use **NetSec: Executar programa** (▶ na barra do editor) para escolher o modo de
+execução e ver a tabela de resultados no terminal integrado.

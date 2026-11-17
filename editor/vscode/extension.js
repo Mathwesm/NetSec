@@ -5,6 +5,73 @@ const client = require("./client");
 
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
+  context.subscriptions.push(vscode.commands.registerCommand("netsec.run", runProgram));
+  if (vscode.workspace.isTrusted) {
+    activateCompilerFeatures(context);
+    return;
+  }
+  const listener = vscode.workspace.onDidGrantWorkspaceTrust(() => {
+    listener.dispose();
+    activateCompilerFeatures(context);
+  });
+  context.subscriptions.push(listener);
+}
+
+/** Run the selected saved program through the NetSec CLI. @param {vscode.Uri} [resource] */
+async function runProgram(resource) {
+  if (!vscode.workspace.isTrusted) {
+    await vscode.window.showWarningMessage(
+      "Para executar a NetSec, abra Manage Workspace Trust e confie na pasta do projeto, se você a reconhecer."
+    );
+    return;
+  }
+
+  const uri = resource instanceof vscode.Uri ? resource : vscode.window.activeTextEditor?.document.uri;
+  const folder = uri?.scheme === "file" ? vscode.workspace.getWorkspaceFolder(uri) : undefined;
+  if (!uri || !folder) {
+    await vscode.window.showWarningMessage("Abra um arquivo .netsec salvo na pasta do projeto.");
+    return;
+  }
+
+  try {
+    const document = await vscode.workspace.openTextDocument(uri);
+    if (document.languageId !== "netsec") return;
+
+    const option = await vscode.window.showQuickPick([
+      { label: "Simulação", description: "Usa examples/scenario.json", args: ["--mode", "simulate", "--scenario", "examples/scenario.json"] },
+      { label: "Rede", description: "Verifica serviços e conexões TCP reais", args: ["--mode", "network"] },
+      { label: "Docker", description: "Usa lab/inventory.json e pode aplicar regras de firewall nos containers",
+        args: ["--mode", "docker", "--inventory", "lab/inventory.json"] },
+    ], { placeHolder: "Escolha como executar o arquivo .netsec" });
+    if (!option) return;
+
+    if (document.isDirty && !await document.save()) {
+      await vscode.window.showErrorMessage("Não foi possível salvar o programa NetSec.");
+      return;
+    }
+
+    const config = vscode.workspace.getConfiguration("netsec", uri);
+    const command = config.get("command", "poetry");
+    const args = config.get("arguments", ["run", "netsec"]);
+    const execution = new vscode.ProcessExecution(command,
+      [...args, "run", uri.fsPath, ...option.args, "--format", "table"],
+      { cwd: folder.uri.fsPath, env: { PYTHONUTF8: "1" } });
+    const task = new vscode.Task({ type: "netsec", file: uri.fsPath }, folder,
+      "Executar (" + option.label + ")", "NetSec", execution, []);
+    task.presentationOptions = {
+      reveal: vscode.TaskRevealKind.Always,
+      panel: vscode.TaskPanelKind.Dedicated,
+      echo: false,
+      showReuseMessage: false,
+    };
+    await vscode.tasks.executeTask(task);
+  } catch (error) {
+    await vscode.window.showErrorMessage("Falha ao iniciar a NetSec: " + String(error));
+  }
+}
+
+/** @param {vscode.ExtensionContext} context */
+function activateCompilerFeatures(context) {
   const diagnostics = vscode.languages.createDiagnosticCollection("netsec");
   const output = vscode.window.createOutputChannel("NetSec");
   /** @type {Map<string, NodeJS.Timeout>} */

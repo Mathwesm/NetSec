@@ -101,12 +101,15 @@ esperada de conectividade depois do bloqueio.
 
 ```sh
 npm --prefix editor/vscode run package
-code --install-extension editor/vscode/netsec-language-0.1.0.vsix
+code --install-extension editor/vscode/netsec-language-0.1.4.vsix
 code .
 ```
 
 Abra a raiz do repositório e um arquivo `.netsec`. A extensão oferece cores, snippets,
 nomes visíveis com tipo, hover, ir à declaração e erros do compilador no painel Problems.
+A ação **NetSec: Executar programa** (▶ na barra do editor) abre a escolha entre simulação,
+rede e Docker. A execução exige uma pasta confiável e mostra uma tabela no terminal integrado.
+Na linha de comando, use a opção --format table para obter a mesma apresentação.
 Ela analisa o conteúdo ainda não salvo; não executa rede ao digitar. Usa por padrão
 `poetry run netsec editor`, configurável em `netsec.command` e `netsec.arguments`.
 

@@ -2,24 +2,48 @@
   "name": "netsec-language",
   "displayName": "NetSec",
   "description": "Syntax highlighting, typed completion and compiler diagnostics for NetSec.",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "publisher": "Mathwesm",
   "engines": {"vscode": "^1.90.0"},
   "categories": ["Programming Languages"],
   "main": "./extension.js",
   "repository": {"type": "git", "url": "https://github.com/Mathwesm/NetSec.git"},
-  "capabilities": {"untrustedWorkspaces": {"supported": false}},
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Syntax highlighting works in Restricted Mode. Compiler features require Workspace Trust.",
+      "restrictedConfigurations": ["netsec.command", "netsec.arguments"]
+    }
+  },
   "activationEvents": ["onLanguage:netsec"],
   "contributes": {
-    "languages": [{"id": "netsec", "aliases": ["NetSec"], "extensions": [".netsec"], "configuration": "./language-configuration.json"}],
+    "languages": [{
+      "id": "netsec",
+      "aliases": ["NetSec"],
+      "extensions": [".netsec"],
+      "configuration": "./language-configuration.json",
+      "icon": {"light": "./icons/netsec.svg", "dark": "./icons/netsec.svg"}
+    }],
     "grammars": [{"language": "netsec", "scopeName": "source.netsec", "path": "./syntaxes/netsec.tmLanguage.json"}],
     "snippets": [{"language": "netsec", "path": "./snippets/netsec.json"}],
-    "commands": [{"command": "netsec.validate", "title": "NetSec: Validar programa"}],
+    "commands": [
+      {"command": "netsec.validate", "title": "NetSec: Validar programa"},
+      {"command": "netsec.run", "title": "NetSec: Executar programa", "icon": "$(play)"}
+    ],
+    "menus": {
+      "commandPalette": [
+        {"command": "netsec.validate", "when": "isWorkspaceTrusted"},
+        {"command": "netsec.run", "when": "resourceLangId == netsec"}
+      ],
+      "editor/title": [
+        {"command": "netsec.run", "when": "resourceLangId == netsec && resourceScheme == file", "group": "navigation"}
+      ]
+    },
     "configuration": {
       "title": "NetSec",
       "properties": {
         "netsec.command": {"type": "string", "default": "poetry", "description": "Executável que inicia o compilador."},
-        "netsec.arguments": {"type": "array", "items": {"type": "string"}, "default": ["run", "netsec"], "description": "Argumentos anteriores ao subcomando editor."}
+        "netsec.arguments": {"type": "array", "items": {"type": "string"}, "default": ["run", "netsec"], "description": "Argumentos anteriores ao subcomando da NetSec."}
       }
     }
   },
